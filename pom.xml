@@ -3,75 +3,134 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.1</version>
-        <relativePath /> <!-- lookup parent from repository -->
+        <version>4.0.3</version>
+        <relativePath />
     </parent>
-    <groupId>com.chaykin</groupId>
-    <artifactId>jasper-modular-library</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
-    <name>jasper-modular-library</name>
-    <description>jasper-modular-library</description>
-    <url />
+
+    <groupId>io.github.hhdevr</groupId>
+    <artifactId>jasper-modular-parent</artifactId>
+    <version>0.1.0</version>
+    <name>jasper-modular-parent</name>
+    <description>Modular JasperReports subreport management library</description>
+    <packaging>pom</packaging>
+
+    <url>https://github.com/hhdevr/jasper-modular-library</url>
+
     <licenses>
-        <license />
+        <license>
+            <name>Apache License 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+        </license>
     </licenses>
+
     <developers>
-        <developer />
+        <developer>
+            <name>Dmitry Chaykin</name>
+            <email>hhdevr@gmail.com</email>
+        </developer>
     </developers>
+
     <scm>
-        <connection />
-        <developerConnection />
-        <tag />
-        <url />
+        <connection>scm:git:github.com/hhdevr/jasper-modular.git</connection>
+        <url>https://github.com/hhdevr/jasper-modular-library</url>
     </scm>
+
+    <modules>
+        <module>jasper-modular-core</module>
+        <module>jasper-modular-autoconfigure</module>
+        <module>jasper-modular-processor</module>
+        <module>jasper-modular-starter</module>
+        <module>jasper-modular-sample</module>
+    </modules>
+
     <properties>
         <java.version>25</java.version>
+        <jasperreports.version>7.0.3</jasperreports.version>
+        <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
+        <central-publishing-maven-plugin.version>0.7.0</central-publishing-maven-plugin.version>
     </properties>
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webflux</artifactId>
-        </dependency>
 
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webflux-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.github.hhdevr</groupId>
+                <artifactId>jasper-modular-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.hhdevr</groupId>
+                <artifactId>jasper-modular-autoconfigure</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.hhdevr</groupId>
+                <artifactId>jasper-modular-processor</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.hhdevr</groupId>
+                <artifactId>jasper-modular-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.sf.jasperreports</groupId>
+                <artifactId>jasperreports</artifactId>
+                <version>${jasperreports.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </path>
-                    </annotationProcessorPaths>
-                </configuration>
+                <artifactId>maven-source-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-gpg-plugin</artifactId>
+                <version>${maven-gpg-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>sign-artifacts</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>sign</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>${central-publishing-maven-plugin.version}</version>
+                <extensions>true</extensions>
                 <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
-                    </excludes>
+                    <publishingServerId>central</publishingServerId>
                 </configuration>
             </plugin>
         </plugins>
