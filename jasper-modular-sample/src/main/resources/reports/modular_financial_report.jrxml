@@ -1,0 +1,71 @@
+<!-- Created with Jaspersoft Studio version 7.0.3.final using JasperReports Library version 7.0.3-41034ca841d452f3305ba55b9042260aaa1ab5dd  -->
+<jasperReport name="Blank_A4" language="java" pageWidth="595" pageHeight="842" columnWidth="555" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20" uuid="4beba0ab-4b7d-4d13-a44c-74748a6ca794">
+    <parameter name="ProfitMapParameter" class="java.util.Map"/>
+    <parameter name="ProfitReport" class="net.sf.jasperreports.engine.JasperReport"/>
+    <parameter name="ExpenseMapParameter" class="java.util.Map"/>
+    <parameter name="ExpenseReport" class="net.sf.jasperreports.engine.JasperReport"/>
+    <parameter name="RevenueMapParameter" class="java.util.Map"/>
+    <parameter name="RevenueReport" class="net.sf.jasperreports.engine.JasperReport"/>
+    <parameter name="netProfit" class="java.lang.Double"/>
+    <parameter name="totalExpenses" class="java.lang.Double"/>
+    <parameter name="totalRevenue" class="java.lang.Double"/>
+    <parameter name="currency" class="java.lang.String"/>
+    <parameter name="period" class="java.lang.String"/>
+    <parameter name="companyName" class="java.lang.String"/>
+    <parameter name="companyDetails" class="com.chaykin.jasper.sample.module.model.CompanyDetails"/>
+    <query language="sql"><![CDATA[]]></query>
+    <background splitType="Stretch"/>
+    <title height="188" splitType="Stretch">
+        <element kind="frame" uuid="51e9e5d2-80a1-4eff-87e8-f44fd04ef6bb" x="0" y="10" width="555" height="121">
+            <element kind="image" uuid="c165fd7b-f489-4f54-a5b5-b495b96772f0" x="420" y="0" width="120" height="121">
+                <expression><![CDATA[$P{companyDetails}.getLogo()]]></expression>
+            </element>
+            <element kind="textField" uuid="cdc63511-37ce-42d9-be54-311827c9c292" x="0" y="0" width="290" height="40" fontSize="13.0">
+                <expression><![CDATA[$P{companyDetails}.getName()]]></expression>
+                <property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+                <property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+            </element>
+            <element kind="staticText" x="0" y="60" width="100" height="30">
+                <text><![CDATA[Manager name: ]]></text>
+            </element>
+            <element kind="textField" x="100" y="60" width="180" height="30">
+                <expression><![CDATA[$P{companyDetails}.getManager()]]></expression>
+                <property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+                <property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+            </element>
+            <element kind="staticText"  x="0" y="90" width="100" height="30">
+                <text><![CDATA[E-mail: ]]></text>
+            </element>
+            <element kind="textField"  x="100" y="90" width="180" height="30">
+                <expression><![CDATA[$P{companyDetails}.getEmail()]]></expression>
+                <property name="com.jaspersoft.studio.unit.width" value="pixel"/>
+                <property name="com.jaspersoft.studio.unit.height" value="pixel"/>
+            </element>
+        </element>
+    </title>
+    <detail>
+        <band height="100">
+            <element kind="subreport" uuid="5fe0d1a3-a2d4-44d0-b782-477621057bfa" positionType="Float" x="0" y="0" width="555" height="94" removeLineWhenBlank="true">
+                <parametersMapExpression><![CDATA[$P{RevenueMapParameter}]]></parametersMapExpression>
+                <dataSourceExpression><![CDATA[new JREmptyDataSource()]]></dataSourceExpression>
+                <expression><![CDATA[$P{RevenueReport}]]></expression>
+            </element>
+        </band>
+        <band height="100">
+            <element kind="subreport" uuid="4b4940e2-b085-4635-ba09-6f2fcf4c2c10" positionType="Float" x="0" y="0" width="555" height="94" removeLineWhenBlank="true">
+                <parametersMapExpression><![CDATA[$P{ExpenseMapParameter}]]></parametersMapExpression>
+                <dataSourceExpression><![CDATA[new JREmptyDataSource()]]></dataSourceExpression>
+                <expression><![CDATA[$P{ExpenseReport}]]></expression>
+            </element>
+        </band>
+        <band height="100">
+            <element kind="subreport" uuid="34eac47c-df51-4e06-8cfe-3af18a74f72f" positionType="Float" x="0" y="0" width="555" height="94" removeLineWhenBlank="true">
+                <parametersMapExpression><![CDATA[$P{ProfitMapParameter}]]></parametersMapExpression>
+                <dataSourceExpression><![CDATA[new JREmptyDataSource()]]></dataSourceExpression>
+                <expression><![CDATA[$P{ProfitReport}]]></expression>
+            </element>
+        </band>
+    </detail>
+    <pageFooter height="54" splitType="Stretch"/>
+    <summary height="42" splitType="Stretch"/>
+</jasperReport>
