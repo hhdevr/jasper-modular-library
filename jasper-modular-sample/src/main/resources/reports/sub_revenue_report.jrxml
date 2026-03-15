@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Jaspersoft Studio version 7.0.3.final using JasperReports Library version 7.0.3-41034ca841d452f3305ba55b9042260aaa1ab5dd  -->
+<jasperReport bottomMargin="20" columnWidth="555" language="java" leftMargin="20" name="Blank_A4"
+              pageHeight="842" pageWidth="595" rightMargin="20" topMargin="20"
+              uuid="4beba0ab-4b7d-4d13-a44c-74748a6ca794">
+    <subDataset name="items">
+        <field class="java.lang.String" name="category" />
+        <field class="java.lang.Double" name="amount" />
+        <field class="java.lang.Double" name="percent" />
+    </subDataset>
+    <parameter class="net.sf.jasperreports.engine.data.JRBeanCollectionDataSource" name="items" />
+    <parameter class="java.lang.Double" name="growthPercent" />
+    <parameter class="java.lang.Double" name="totalRevenue" />
+    <query language="sql" />
+    <background splitType="Stretch" />
+    <title height="79" splitType="Stretch" />
+    <pageHeader height="35" splitType="Stretch" />
+    <columnHeader height="61" splitType="Stretch" />
+    <detail>
+        <band height="125" splitType="Stretch" />
+    </detail>
+    <columnFooter height="45" splitType="Stretch" />
+    <pageFooter height="54" splitType="Stretch" />
+    <summary height="42" splitType="Stretch" />
+</jasperReport>
