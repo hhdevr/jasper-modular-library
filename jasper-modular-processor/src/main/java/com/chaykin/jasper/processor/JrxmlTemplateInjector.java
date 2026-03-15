@@ -1,26 +1,41 @@
 package com.chaykin.jasper.processor;
 
-import com.chaykin.jasper.processor.model.JrxmlDataset;
 import com.chaykin.jasper.processor.model.JrxmlDatasetField;
 import com.chaykin.jasper.processor.model.JrxmlParameter;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
+import net.sf.jasperreports.components.list.DesignListContents;
+import net.sf.jasperreports.components.list.ListComponent;
+import net.sf.jasperreports.components.list.StandardListComponent;
+import net.sf.jasperreports.engine.JRException;
+import net.sf.jasperreports.engine.design.JRDesignBand;
+import net.sf.jasperreports.engine.design.JRDesignComponentElement;
+import net.sf.jasperreports.engine.design.JRDesignDataset;
+import net.sf.jasperreports.engine.design.JRDesignDatasetRun;
+import net.sf.jasperreports.engine.design.JRDesignExpression;
+import net.sf.jasperreports.engine.design.JRDesignField;
+import net.sf.jasperreports.engine.design.JRDesignParameter;
+import net.sf.jasperreports.engine.design.JRDesignSection;
+import net.sf.jasperreports.engine.design.JRDesignSubreport;
+import net.sf.jasperreports.engine.design.JRDesignTextField;
+import net.sf.jasperreports.engine.design.JasperDesign;
+import net.sf.jasperreports.engine.type.PositionTypeEnum;
+import net.sf.jasperreports.engine.xml.JRXmlLoader;
+import net.sf.jasperreports.engine.xml.JRXmlWriter;
 
 import javax.annotation.processing.Messager;
 import javax.tools.Diagnostic;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Arrays;
 import java.util.List;
 
 public class JrxmlTemplateInjector {
+
+    private static final int COLUMN_WIDTH = 120;
+    private static final int LIST_HEIGHT = 90;
+    private static final int CELL_HEIGHT = 30;
+    private static final int SUBREPORT_HEIGHT = 94;
+    private static final int SUBREPORT_BAND_HEIGHT = 100;
+    private static final int SUBREPORT_WIDTH = 555;
 
     private final Messager messager;
 
@@ -31,76 +46,152 @@ public class JrxmlTemplateInjector {
     public void inject(InputStream template,
                        List<JrxmlParameter> fields,
                        OutputStream output) throws Exception {
-        Document doc = parseXml(template);
+        JasperDesign design = JRXmlLoader.load(template);
 
-        injectDatasets(doc, fields);
-        injectParameters(doc, fields);
-        injectSubreportBands(doc, fields);
+        injectDatasets(design, fields);
+        injectParameters(design, fields);
+        injectListComponents(design, fields);
+        injectSubreportBands(design, fields);
 
-        writeToStream(doc, output);
+        JRXmlWriter.writeReport(design, output, "UTF-8");
     }
 
-    private void injectDatasets(Document doc, List<JrxmlParameter> fields) {
-        Element root = doc.getDocumentElement();
-        Node firstChild = root.getFirstChild();
-
-        fields.stream()
-              .filter(f -> f.dataset() != null)
-              .filter(f -> !datasetExists(doc, f.dataset().name()))
-              .map(f -> createDatasetElement(doc, f.dataset()))
-              .forEach(el -> root.insertBefore(el, firstChild));
-    }
-
-    private Element createDatasetElement(Document doc, JrxmlDataset dataset) {
-        Element el = doc.createElement("subDataset");
-
-        for (JrxmlDatasetField field: dataset.fields()) {
-            el.appendChild(createNamedElement(doc, "field", field.name(), field.jrxmlClass()));
-        }
-        el.setAttribute("name", dataset.name());
-        return el;
-    }
-
-    private boolean datasetExists(Document doc, String name) {
-        NodeList datasets = doc.getElementsByTagName("subDataset");
-        for (int i = 0; i < datasets.getLength(); i++) {
-            if (name.equals(((Element) datasets.item(i)).getAttribute("name"))) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Dataset already exists - skipping: " + name);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void injectParameters(Document doc, List<JrxmlParameter> fields) {
-        Node insertionPoint = findInsertionPoint(doc);
-
+    private void injectParameters(JasperDesign design, List<JrxmlParameter> fields) throws JRException {
         for (JrxmlParameter field: fields) {
-            if (parameterExists(doc, field.name())) {
+            if (design.getParametersMap().containsKey(field.name())) {
                 messager.printMessage(Diagnostic.Kind.NOTE,
                                       "Parameter already exists - skipping: " + field.name());
                 continue;
             }
-            Element param = createNamedElement(doc, "parameter", field.name(), field.jrxmlClass());
-            insertAfter(insertionPoint, param);
+            JRDesignParameter param = new JRDesignParameter();
+            param.setName(field.name());
+            param.setValueClassName(field.jrxmlClass());
+            design.addParameter(param);
         }
     }
 
-    private boolean parameterExists(Document doc, String name) {
-        NodeList params = doc.getElementsByTagName("parameter");
-        for (int i = 0; i < params.getLength(); i++) {
-            if (name.equals(((Element) params.item(i)).getAttribute("name"))) {
-                return true;
+    private void injectDatasets(JasperDesign design, List<JrxmlParameter> fields) throws JRException {
+        for (JrxmlParameter field: fields) {
+            if (field.dataset() == null) {
+                continue;
             }
+
+            if (design.getDatasetMap().containsKey(field.dataset().name())) {
+                messager.printMessage(Diagnostic.Kind.NOTE,
+                                      "Dataset already exists - skipping: " + field.dataset().name());
+                continue;
+            }
+
+            JRDesignDataset dataset = new JRDesignDataset(false);
+            dataset.setName(field.dataset().name());
+
+            for (JrxmlDatasetField datasetField: field.dataset().fields()) {
+                JRDesignField jrField = new JRDesignField();
+                jrField.setName(datasetField.name());
+                jrField.setValueClassName(datasetField.jrxmlClass());
+                dataset.addField(jrField);
+            }
+            design.addDataset(dataset);
         }
-        return false;
     }
 
-    private void injectSubreportBands(Document doc, List<JrxmlParameter> fields) {
+    private void injectListComponents(JasperDesign design, List<JrxmlParameter> fields) throws JRException {
+        List<JrxmlParameter> collectionFields = fields.stream()
+                                                      .filter(f -> f.dataset() != null)
+                                                      .toList();
+        if (collectionFields.isEmpty()) {
+            return;
+        }
+
+        JRDesignSection detailSection = (JRDesignSection) design.getDetailSection();
+
+        for (JrxmlParameter field: collectionFields) {
+            if (listComponentExists(detailSection, field.name())) {
+                messager.printMessage(Diagnostic.Kind.NOTE,
+                                      "List component already exists - skipping: " + field.name());
+                continue;
+            }
+
+            JRDesignBand band = getOrCreateLastBand(detailSection);
+            band.addElement(createListComponent(design, field));
+            messager.printMessage(Diagnostic.Kind.NOTE,
+                                  "Injected list component: " + field.name());
+        }
+    }
+
+    private boolean listComponentExists(JRDesignSection section, String paramName) {
+        return Arrays.stream(section.getBands())
+                     .flatMap(b -> Arrays.stream(b.getElements()))
+                     .filter(e -> e instanceof JRDesignComponentElement)
+                     .map(e -> (JRDesignComponentElement) e)
+                     .filter(e -> e.getComponent() instanceof ListComponent)
+                     .map(e -> (StandardListComponent) e.getComponent())
+                     .anyMatch(lc -> {
+                         JRDesignDatasetRun run = (JRDesignDatasetRun) lc.getDatasetRun();
+                         return run != null &&
+                                run.getDataSourceExpression() != null &&
+                                run.getDataSourceExpression().getText().contains(paramName);
+                     });
+    }
+
+    private JRDesignBand getOrCreateLastBand(JRDesignSection section) throws JRException {
+        JRDesignBand[] bands = (JRDesignBand[]) section.getBands();
+        if (bands.length > 0) {
+            return bands[bands.length - 1];
+        }
+        JRDesignBand band = new JRDesignBand();
+        band.setHeight(LIST_HEIGHT);
+        section.addBand(band);
+        return band;
+    }
+
+    private JRDesignComponentElement createListComponent(JasperDesign design, JrxmlParameter field) {
+        List<JrxmlDatasetField> datasetFields = field.dataset().fields();
+        int columnCount = datasetFields.size();
+        int totalWidth = columnCount * COLUMN_WIDTH;
+
+        JRDesignDatasetRun datasetRun = new JRDesignDatasetRun();
+        datasetRun.setDatasetName(field.dataset().name());
+        JRDesignExpression dsExpr = new JRDesignExpression();
+        dsExpr.setText("$P{" + field.name() + "}");
+        datasetRun.setDataSourceExpression(dsExpr);
+
+        DesignListContents contents = new DesignListContents();
+        contents.setHeight(CELL_HEIGHT);
+        contents.setWidth(totalWidth);
+
+        int x = 0;
+        for (JrxmlDatasetField datasetField: datasetFields) {
+            JRDesignTextField textField = new JRDesignTextField();
+            textField.setX(x);
+            textField.setY(0);
+            textField.setWidth(COLUMN_WIDTH);
+            textField.setHeight(CELL_HEIGHT);
+
+            JRDesignExpression expr = new JRDesignExpression();
+            expr.setText("$F{" + datasetField.name() + "}");
+            textField.setExpression(expr);
+            contents.addElement(textField);
+            x += COLUMN_WIDTH;
+        }
+
+        StandardListComponent listComponent = new StandardListComponent();
+        listComponent.setDatasetRun(datasetRun);
+        listComponent.setContents(contents);
+
+        JRDesignComponentElement element = new JRDesignComponentElement();
+        element.setX(0);
+        element.setY(0);
+        element.setWidth(totalWidth);
+        element.setHeight(LIST_HEIGHT);
+        element.setComponent(listComponent);
+        return element;
+    }
+
+    private void injectSubreportBands(JasperDesign design, List<JrxmlParameter> fields) throws JRException {
         List<String> subreportPrefixes = fields.stream()
-                                               .filter(f -> f.jrxmlClass().equals(
-                                                       "net.sf.jasperreports.engine.JasperReport"))
+                                               .filter(f -> "net.sf.jasperreports.engine.JasperReport"
+                                                       .equals(f.jrxmlClass()))
                                                .map(f -> f.name().replace("Report", ""))
                                                .toList();
 
@@ -108,137 +199,55 @@ public class JrxmlTemplateInjector {
             return;
         }
 
-        Element detail = findOrCreateDetail(doc);
+        JRDesignSection detailSection = (JRDesignSection) design.getDetailSection();
 
         for (String prefix: subreportPrefixes) {
-            if (subreportBandExists(detail, prefix)) {
+            if (subreportBandExists(detailSection, prefix)) {
                 messager.printMessage(Diagnostic.Kind.NOTE,
                                       "Subreport band already exists - skipping: " + prefix);
                 continue;
             }
-            detail.appendChild(createSubreportBand(doc, prefix));
+            detailSection.addBand(createSubreportBand(prefix));
             messager.printMessage(Diagnostic.Kind.NOTE,
                                   "Injected subreport band: " + prefix);
         }
     }
 
-    private Element findOrCreateDetail(Document doc) {
-        NodeList details = doc.getElementsByTagName("detail");
-        if (details.getLength() > 0) {
-            return (Element) details.item(0);
-        }
-        Element detail = doc.createElement("detail");
-        doc.getDocumentElement().appendChild(detail);
-        return detail;
+    private boolean subreportBandExists(JRDesignSection section, String prefix) {
+        return Arrays.stream(section.getBands())
+                     .flatMap(b -> Arrays.stream(b.getElements()))
+                     .filter(e -> e instanceof JRDesignSubreport)
+                     .map(e -> (JRDesignSubreport) e)
+                     .anyMatch(sr -> sr.getExpression() != null &&
+                                     sr.getExpression().getText().contains(prefix + "Report"));
     }
 
-    private boolean subreportBandExists(Element detail, String prefix) {
-        NodeList bands = detail.getElementsByTagName("band");
-        for (int i = 0; i < bands.getLength(); i++) {
-            NodeList subreports = ((Element) bands.item(i))
-                    .getElementsByTagName("element");
-            for (int j = 0; j < subreports.getLength(); j++) {
-                Element el = (Element) subreports.item(j);
-                String expr = getTextContent(el, "expression");
-                if (expr != null && expr.contains(prefix + "Report")) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
+    private JRDesignBand createSubreportBand(String prefix) throws JRException {
+        JRDesignBand band = new JRDesignBand();
+        band.setHeight(SUBREPORT_BAND_HEIGHT);
+        band.setSplitType(net.sf.jasperreports.engine.type.SplitTypeEnum.STRETCH);
 
-    private Element createSubreportBand(Document doc, String prefix) {
-        Element band = doc.createElement("band");
-        band.setAttribute("height", "100");
+        JRDesignSubreport subreport = new JRDesignSubreport(null);
+        subreport.setX(0);
+        subreport.setY(0);
+        subreport.setWidth(SUBREPORT_WIDTH);
+        subreport.setHeight(SUBREPORT_HEIGHT);
+        subreport.setPositionType(PositionTypeEnum.FLOAT);
+        subreport.setRemoveLineWhenBlank(true);
 
-        Element subreport = doc.createElement("element");
-        subreport.setAttribute("kind", "subreport");
-        subreport.setAttribute("positionType", "Float");
-        subreport.setAttribute("x", "0");
-        subreport.setAttribute("y", "0");
-        subreport.setAttribute("width", "555");
-        subreport.setAttribute("height", "94");
-        subreport.setAttribute("removeLineWhenBlank", "true");
+        JRDesignExpression paramsExpr = new JRDesignExpression();
+        paramsExpr.setText("$P{" + prefix + "MapParameter}");
+        subreport.setParametersMapExpression(paramsExpr);
 
-        Element paramsExpr = doc.createElement("parametersMapExpression");
-        paramsExpr.appendChild(doc.createCDATASection("$P{" + prefix + "MapParameter}"));
-        subreport.appendChild(paramsExpr);
+        JRDesignExpression dsExpr = new JRDesignExpression();
+        dsExpr.setText("new net.sf.jasperreports.engine.JREmptyDataSource()");
+        subreport.setDataSourceExpression(dsExpr);
 
-        Element dsExpr = doc.createElement("dataSourceExpression");
-        dsExpr.appendChild(doc.createCDATASection("new JREmptyDataSource()"));
-        subreport.appendChild(dsExpr);
+        JRDesignExpression expr = new JRDesignExpression();
+        expr.setText("$P{" + prefix + "Report}");
+        subreport.setExpression(expr);
 
-        Element expr = doc.createElement("expression");
-        expr.appendChild(doc.createCDATASection("$P{" + prefix + "Report}"));
-        subreport.appendChild(expr);
-
-        band.appendChild(subreport);
+        band.addElement(subreport);
         return band;
     }
-
-    private Element createNamedElement(Document doc,
-                                       String tag,
-                                       String name,
-                                       String jrxmlClass) {
-        Element el = doc.createElement(tag);
-        el.setAttribute("class", jrxmlClass);
-        el.setAttribute("name", name);
-        return el;
-    }
-
-    private Node findInsertionPoint(Document doc) {
-        NodeList params = doc.getElementsByTagName("parameter");
-        if (params.getLength() > 0) {
-            return params.item(params.getLength() - 1);
-        }
-        return doc.getDocumentElement().getFirstChild();
-    }
-
-    private void insertAfter(Node reference, Element newNode) {
-        Node parent = reference.getParentNode();
-        Node next = reference.getNextSibling();
-        if (next != null) {
-            parent.insertBefore(newNode, next);
-        } else {
-            parent.appendChild(newNode);
-        }
-    }
-
-    private String getTextContent(Element el, String tagName) {
-        NodeList nodes = el.getElementsByTagName(tagName);
-        if (nodes.getLength() > 0) {
-            return nodes.item(0).getTextContent();
-        }
-        return null;
-    }
-
-    private Document parseXml(InputStream source) throws Exception {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        Document doc = factory.newDocumentBuilder().parse(source);
-        removeEmptyTextNodes(doc.getDocumentElement());
-        return doc;
-    }
-
-    private void writeToStream(Document doc, OutputStream output) throws Exception {
-        Transformer transformer = TransformerFactory.newInstance().newTransformer();
-
-        transformer.setOutputProperty(OutputKeys.INDENT, "yes");
-        transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "4");
-        transformer.transform(new DOMSource(doc), new StreamResult(output));
-    }
-
-    private void removeEmptyTextNodes(Node node) {
-        NodeList children = node.getChildNodes();
-        for (int i = children.getLength() - 1; i >= 0; i--) {
-            Node child = children.item(i);
-            if (child.getNodeType() == Node.TEXT_NODE
-                && child.getTextContent().isBlank()) {
-                node.removeChild(child);
-            } else if (child.hasChildNodes()) {
-                removeEmptyTextNodes(child);
-            }
-        }
-    }
-
 }
