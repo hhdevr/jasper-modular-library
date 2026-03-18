@@ -23,6 +23,7 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.WildcardType;
 import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
@@ -37,7 +38,7 @@ import java.util.List;
 import java.util.Set;
 
 @SupportedAnnotationTypes({
-        "com.chaykin.jasper.core.annotation.JasperRootReport",
+        "com.chaykin.jasper.core.annotation.JasperModularReport",
         "com.chaykin.jasper.core.annotation.JasperSubreport"
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_25)
@@ -122,8 +123,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                              List<JrxmlParameter> fields) throws Exception {
         FileObject output = filer.createResource(StandardLocation.SOURCE_OUTPUT,
                                                  "",
-                                                 templatePath.replaceFirst("^/", "")
-        );
+                                                 templatePath.replaceFirst("^/", ""));
 
         try (OutputStream out = output.openOutputStream()) {
             new JrxmlTemplateInjector(messager).inject(source, fields, out);
@@ -135,76 +135,86 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         TypeElement current = classElement;
 
         while (current != null && !isJasperModularDataFiller(current)) {
-            for (VariableElement field: ElementFilter.fieldsIn(current.getEnclosedElements())) {
-
-                if (field.getAnnotation(JasperIgnore.class) != null) {
-                    continue;
-                }
-
-                TypeElement fieldClass = (TypeElement)
-                        typeUtils.asElement(field.asType());
-
-                if (fieldClass != null) {
-                    JasperSubreport ann = fieldClass.getAnnotation(JasperSubreport.class);
-
-                    if (ann != null) {
-                        String prefix = ann.prefix().isEmpty()
-                                        ? fieldClass.getSimpleName().toString()
-                                        : ann.prefix();
-                        result.add(new JrxmlParameter(prefix + "Report",
-                                                      "net.sf.jasperreports.engine.JasperReport",
-                                                      null));
-                        result.add(new JrxmlParameter(prefix + "MapParameter",
-                                                      "java.util.Map",
-                                                      null));
-                        continue;
-                    }
-                }
-
-                if (isCollection(field.asType())) {
-                    TypeMirror elementType = resolveCollectionElementType(field.asType());
-                    if (elementType != null) {
-                        TypeElement elementClass = (TypeElement) typeUtils.asElement(elementType);
-
-                        if (elementClass != null && !isSimpleType(elementClass)) {
-                            result.add(new JrxmlParameter(field.getSimpleName().toString(),
-                                                          JR_BEAN_COLLECTION_DS,
-                                                          describeDataset(field.getSimpleName().toString(),
-                                                                          elementClass)));
-                        } else {
-                            result.add(new JrxmlParameter(field.getSimpleName().toString(),
-                                                          JR_BEAN_COLLECTION_DS,
-                                                          null));
-                        }
-                    }
-                    continue;
-                }
-
-                result.add(new JrxmlParameter(field.getSimpleName().toString(),
-                                              field.asType().toString(),
-                                              null));
-            }
+            ElementFilter.fieldsIn(current.getEnclosedElements())
+                         .stream()
+                         .filter(f -> f.getAnnotation(JasperIgnore.class) == null)
+                         .forEach(f -> describeField(f, result));
 
             TypeMirror superclass = current.getSuperclass();
-            current = superclass != null
-                      ? (TypeElement) typeUtils.asElement(superclass)
-                      : null;
+            current = superclass != null ? (TypeElement) typeUtils.asElement(superclass) : null;
         }
         return result;
     }
 
-    private JrxmlDataset describeDataset(String name, TypeElement elementClass) {
-        List<JrxmlDatasetField> fields = new ArrayList<>();
+    private void describeField(VariableElement field, List<JrxmlParameter> result) {
+        TypeElement fieldClass = (TypeElement) typeUtils.asElement(field.asType());
 
-        for (VariableElement field: ElementFilter.fieldsIn(elementClass.getEnclosedElements())) {
-            if (field.getAnnotation(JasperIgnore.class) != null) {
-                continue;
-            }
-
-            fields.add(new JrxmlDatasetField(field.getSimpleName().toString(),
-                                             field.asType().toString()
-            ));
+        if (isSubreport(fieldClass)) {
+            result.addAll(describeSubreportParameters(fieldClass));
+            return;
         }
+
+        if (isCollection(field.asType())) {
+            describeCollectionField(field, result);
+            return;
+        }
+
+        result.add(new JrxmlParameter(field.getSimpleName().toString(),
+                                      field.asType().toString(),
+                                      null));
+    }
+
+    private boolean isSubreport(TypeElement fieldClass) {
+        return fieldClass != null && fieldClass.getAnnotation(JasperSubreport.class) != null;
+    }
+
+    private List<JrxmlParameter> describeSubreportParameters(TypeElement fieldClass) {
+        JasperSubreport ann = fieldClass.getAnnotation(JasperSubreport.class);
+        String prefix = ann.prefix().isEmpty()
+                        ? fieldClass.getSimpleName().toString()
+                        : ann.prefix();
+        return List.of(new JrxmlParameter(prefix + "Report",
+                                          "net.sf.jasperreports.engine.JasperReport",
+                                          null),
+                       new JrxmlParameter(prefix + "MapParameter",
+                                          "java.util.Map",
+                                          null)
+        );
+    }
+
+    private void describeCollectionField(VariableElement field, List<JrxmlParameter> result) {
+        TypeMirror elementType = resolveCollectionElementType(field.asType());
+        if (elementType == null) {
+            return;
+        }
+
+        TypeElement elementClass = (TypeElement) typeUtils.asElement(elementType);
+
+        if (elementClass != null && isJasperModularDataFiller(elementClass)) {
+            messager.printMessage(Diagnostic.Kind.ERROR,
+                                  "List of subreports is not supported. Field: "
+                                  + field.getSimpleName(), field);
+            return;
+        }
+
+        JrxmlDataset dataset = elementClass != null && !isSimpleType(elementClass)
+                               ? describeDataset(field.getSimpleName().toString(), elementClass)
+                               : null;
+
+        result.add(new JrxmlParameter(field.getSimpleName().toString(),
+                                      JR_BEAN_COLLECTION_DS,
+                                      dataset));
+    }
+
+    private JrxmlDataset describeDataset(String name, TypeElement elementClass) {
+        List<JrxmlDatasetField> fields =
+                ElementFilter.fieldsIn(elementClass.getEnclosedElements())
+                             .stream()
+                             .filter(f -> f.getAnnotation(JasperIgnore.class) == null)
+                             .map(f -> new JrxmlDatasetField(f.getSimpleName().toString(),
+                                                             f.asType().toString()))
+                             .toList();
+
         return new JrxmlDataset(name, fields);
     }
 
@@ -263,16 +273,13 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     }
 
     private String resolveTemplateName() {
-        String option = processingEnv.getOptions()
-                                     .getOrDefault("jasper.template", "A4");
-        return "Blank_" + option + ".jrxml";
+        return "Blank_" + processingEnv.getOptions().getOrDefault("jasper.template", "A4") + ".jrxml";
     }
 
     private boolean isCollection(TypeMirror type) {
         TypeElement collection = elementUtils.getTypeElement("java.util.Collection");
         return typeUtils.isAssignable(typeUtils.erasure(type),
-                                      typeUtils.erasure(collection.asType())
-        );
+                                      typeUtils.erasure(collection.asType()));
     }
 
     private boolean isSimpleType(TypeElement element) {
@@ -298,13 +305,19 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     }
 
     private TypeMirror resolveCollectionElementType(TypeMirror type) {
-        if (type instanceof DeclaredType declaredType) {
-            List<? extends TypeMirror> args = declaredType.getTypeArguments();
-            if (!args.isEmpty()) {
-                return args.getFirst();
-            }
+        if (!(type instanceof DeclaredType declaredType)) {
+            return null;
         }
-        return null;
+
+        List<? extends TypeMirror> args = declaredType.getTypeArguments();
+        if (args.isEmpty()) {
+            return null;
+        }
+
+        TypeMirror arg = args.getFirst();
+        return arg instanceof WildcardType wildcardType
+               ? (wildcardType.getExtendsBound() != null ? wildcardType.getExtendsBound() : wildcardType.getSuperBound())
+               : arg;
     }
 
     private String toSnakeCase(String name) {

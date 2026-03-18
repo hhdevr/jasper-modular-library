@@ -7,17 +7,13 @@
     <parent>
         <groupId>io.github.hhdevr</groupId>
         <artifactId>jasper-modular-parent</artifactId>
-        <version>0.1.0</version>
+        <version>0.2.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>jasper-modular-starter</artifactId>
     <name>Jasper Modular Starter</name>
-    <description>
-        Spring Boot starter for jasper-modular - add this single dependency to your project
-    </description>
-
-    <packaging>pom</packaging>
+    <description>Spring Boot starter for jasper-modular</description>
 
     <dependencies>
         <dependency>
@@ -31,7 +27,6 @@
         <dependency>
             <groupId>io.github.hhdevr</groupId>
             <artifactId>jasper-modular-processor</artifactId>
-            <optional>true</optional>
         </dependency>
     </dependencies>
 

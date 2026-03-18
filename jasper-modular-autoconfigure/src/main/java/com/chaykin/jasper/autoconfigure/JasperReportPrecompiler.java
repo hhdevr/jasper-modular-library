@@ -1,6 +1,7 @@
 package com.chaykin.jasper.autoconfigure;
 
 import com.chaykin.jasper.core.annotation.JasperModularReport;
+import com.chaykin.jasper.core.annotation.JasperSubreport;
 import com.chaykin.jasper.core.contract.JasperModularCompiler;
 import com.chaykin.jasper.core.exception.JasperModularException;
 import net.sf.jasperreports.engine.JRException;
@@ -29,7 +30,7 @@ public class JasperReportPrecompiler implements ApplicationRunner {
     }
 
     @Override
-    public void run(ApplicationArguments args) throws Exception {
+    public void run(ApplicationArguments args) {
         if (!properties.isPrecompileEnabled()) {
             log.info("JasperReport precompilation is disabled");
             return;
@@ -41,7 +42,7 @@ public class JasperReportPrecompiler implements ApplicationRunner {
         List<String> paths = scanTemplatePaths();
 
         if (paths.isEmpty()) {
-            log.warn("No @JasperTemplate classes found in package: {}",
+            log.warn("No @JasperModularReport or @JasperSubreport classes found in package: {}",
                      properties.getBasePackage());
             return;
         }
@@ -60,17 +61,22 @@ public class JasperReportPrecompiler implements ApplicationRunner {
                 new ClassPathScanningCandidateComponentProvider(false);
 
         scanner.addIncludeFilter(new AnnotationTypeFilter(JasperModularReport.class));
+        scanner.addIncludeFilter(new AnnotationTypeFilter(JasperSubreport.class));
 
         List<String> paths = new ArrayList<>();
 
-        for (BeanDefinition bd: scanner.findCandidateComponents(
-                properties.getBasePackage())) {
+        for (BeanDefinition bd: scanner.findCandidateComponents(properties.getBasePackage())) {
             try {
                 Class<?> clazz = Class.forName(bd.getBeanClassName());
 
-                JasperModularReport template = clazz.getAnnotation(JasperModularReport.class);
-                if (template != null && !template.templatePath().isEmpty()) {
-                    paths.add(template.templatePath());
+                JasperModularReport root = clazz.getAnnotation(JasperModularReport.class);
+                if (root != null && !root.templatePath().isEmpty()) {
+                    paths.add(root.templatePath());
+                }
+
+                JasperSubreport sub = clazz.getAnnotation(JasperSubreport.class);
+                if (sub != null && !sub.templatePath().isEmpty()) {
+                    paths.add(sub.templatePath());
                 }
             } catch (ClassNotFoundException e) {
                 log.error("Cannot load class: {}", bd.getBeanClassName());

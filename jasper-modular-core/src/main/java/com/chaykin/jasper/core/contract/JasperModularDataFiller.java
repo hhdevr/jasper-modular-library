@@ -6,20 +6,18 @@ import com.chaykin.jasper.core.exception.JasperModularException;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
 public class JasperModularDataFiller {
 
-    protected final Map<String, Object> parameters = new HashMap<>();
+    protected Map<String, Object> parameters;
 
     public Map<String, Object> fillMapParameters() {
-        putAllFields();
-        return parameters;
-    }
+        parameters = new HashMap<>();
 
-    protected void putAllFields() {
         Class<?> clazz = this.getClass();
 
         while (clazz != null && clazz != JasperModularDataFiller.class) {
@@ -44,17 +42,29 @@ public class JasperModularDataFiller {
                     }
 
                     if (Collection.class.isAssignableFrom(field.getType())) {
+                        validateCollectionElementType(field);
                         putCollection(field.getName(), (Collection<?>) value);
                     } else {
                         putParameter(field.getName(), value);
                     }
 
                 } catch (IllegalAccessException e) {
-                    throw new JasperModularException(
-                            "Failed to access field: " + field.getName(), e);
+                    throw new JasperModularException("Failed to access field: " + field.getName(), e);
                 }
             }
             clazz = clazz.getSuperclass();
+        }
+        return parameters;
+    }
+
+    private void validateCollectionElementType(Field field) {
+        if (field.getGenericType() instanceof ParameterizedType pt) {
+            Class<?> elementType = (Class<?>) pt.getActualTypeArguments()[0];
+            if (JasperModularDataFiller.class.isAssignableFrom(elementType)) {
+                throw new JasperModularException(
+                        "List of subreports is not supported. Field: " + field.getName()
+                );
+            }
         }
     }
 
@@ -77,9 +87,5 @@ public class JasperModularDataFiller {
         if (data != null && !data.isEmpty()) {
             parameters.put(key, new JRBeanCollectionDataSource(data));
         }
-    }
-
-    protected void resetParameters() {
-        parameters.clear();
     }
 }
