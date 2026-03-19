@@ -85,7 +85,8 @@ public class JasperReportPrecompiler implements ApplicationRunner {
         List<String> paths = scanTemplatePaths();
 
         if (paths.isEmpty()) {
-            log.warn("No @JasperModularReport or @JasperSubreport classes found in package: {}",
+            log.warn("No @JasperModularReport or @JasperSubreport classes found in package: {}. " +
+                     "Check jasper.modular.base-package in your configuration.",
                      properties.getBasePackage());
             return;
         }
@@ -96,7 +97,10 @@ public class JasperReportPrecompiler implements ApplicationRunner {
         paths.forEach(this::compileAndCache);
 
         long ms = Math.round((System.nanoTime() - totalStart) / 1_000_000.0);
-        log.info("Precompilation complete - {} ms", ms);
+        log.info("Precompilation complete - {}/{} templates compiled in {} ms",
+                 paths.size(),
+                 paths.size(),
+                 ms);
     }
 
     /**
@@ -138,9 +142,8 @@ public class JasperReportPrecompiler implements ApplicationRunner {
     /**
      * Compiles the JRXML template at the given classpath path and stores it in the cache.
      *
-     * <p>If the template is already cached, this method returns immediately. Compilation
-     * failures are logged as errors but do not propagate - the application continues to
-     * start normally and compilation will be retried lazily on first use.</p>
+     * <p>Compilation failures are logged and rethrown, preventing the application
+     * from starting with broken report templates.</p>
      *
      * @param path the classpath-relative JRXML path, e.g. {@code /reports/invoice.jrxml}
      */
@@ -161,6 +164,7 @@ public class JasperReportPrecompiler implements ApplicationRunner {
             log.info("  ✓ {} - {} ms", path, ms);
         } catch (JasperModularException e) {
             log.error("  ✗ {} - FAILED: {}", path, e.getMessage());
+            throw e;
         }
     }
 }

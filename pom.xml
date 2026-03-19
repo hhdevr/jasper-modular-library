@@ -6,7 +6,7 @@
 
     <groupId>io.github.hhdevr</groupId>
     <artifactId>jasper-modular-parent</artifactId>
-    <version>0.3.0</version>
+    <version>0.3.1</version>
     <name>jasper-modular-parent</name>
     <description>Modular JasperReports subreport management library</description>
     <packaging>pom</packaging>
