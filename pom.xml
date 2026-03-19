@@ -4,16 +4,9 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.3</version>
-        <relativePath />
-    </parent>
-
     <groupId>io.github.hhdevr</groupId>
     <artifactId>jasper-modular-parent</artifactId>
-    <version>0.1.0</version>
+    <version>0.3.0</version>
     <name>jasper-modular-parent</name>
     <description>Modular JasperReports subreport management library</description>
     <packaging>pom</packaging>
@@ -35,7 +28,7 @@
     </developers>
 
     <scm>
-        <connection>scm:git:github.com/hhdevr/jasper-modular.git</connection>
+        <connection>scm:git:github.com/hhdevr/jasper-modular-library.git</connection>
         <url>https://github.com/hhdevr/jasper-modular-library</url>
     </scm>
 
@@ -44,11 +37,14 @@
         <module>jasper-modular-autoconfigure</module>
         <module>jasper-modular-processor</module>
         <module>jasper-modular-starter</module>
-        <module>jasper-modular-sample</module>
     </modules>
 
     <properties>
-        <java.version>25</java.version>
+        <java.version>17</java.version>
+        <spring-boot-dependencies.version>3.3.0</spring-boot-dependencies.version>
+        <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+        <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
+        <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
         <jasperreports.version>7.0.3</jasperreports.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
         <central-publishing-maven-plugin.version>0.7.0</central-publishing-maven-plugin.version>
@@ -57,25 +53,37 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot-dependencies.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
                 <groupId>io.github.hhdevr</groupId>
                 <artifactId>jasper-modular-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.github.hhdevr</groupId>
                 <artifactId>jasper-modular-autoconfigure</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.github.hhdevr</groupId>
                 <artifactId>jasper-modular-processor</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.github.hhdevr</groupId>
                 <artifactId>jasper-modular-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>net.sf.jasperreports</groupId>
                 <artifactId>jasperreports</artifactId>
@@ -88,7 +96,18 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler-plugin.version}</version>
+                <configuration>
+                    <release>${java.version}</release>
+                    <parameters>true</parameters>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
+                <version>${maven-source-plugin.version}</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
@@ -98,9 +117,14 @@
                     </execution>
                 </executions>
             </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
+                <version>${maven-javadoc-plugin.version}</version>
+                <configuration>
+                    <doclint>all,-missing</doclint>
+                </configuration>
                 <executions>
                     <execution>
                         <id>attach-javadocs</id>
@@ -110,6 +134,7 @@
                     </execution>
                 </executions>
             </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-gpg-plugin</artifactId>
@@ -124,6 +149,7 @@
                     </execution>
                 </executions>
             </plugin>
+
             <plugin>
                 <groupId>org.sonatype.central</groupId>
                 <artifactId>central-publishing-maven-plugin</artifactId>

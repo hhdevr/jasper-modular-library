@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport name="prefilled_test"
+              language="java"
+              pageWidth="595"
+              pageHeight="842"
+              columnWidth="555"
+              leftMargin="20"
+              rightMargin="20"
+              topMargin="20"
+              bottomMargin="20"
+              uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+    <parameter name="existingParam" class="java.lang.String" />
+    <parameter name="ExistingReport" class="net.sf.jasperreports.engine.JasperReport" />
+    <parameter name="ExistingMapParameter" class="java.util.Map" />
+
+    <dataset name="existingDataset" uuid="b2c3d4e5-f6a7-8901-bcde-f12345678901">
+        <field name="existingField" class="java.lang.String" />
+    </dataset>
+
+    <background splitType="Stretch" />
+    <detail>
+        <band height="80">
+            <element kind="subreport" uuid="5fe0d1a3-a2d4-44d0-b782-477621057bfa"
+                     positionType="Float" x="0" y="0" width="555" height="80"
+                     removeLineWhenBlank="true">
+                <parametersMapExpression>
+                    <![CDATA[$P{ExistingMapParameter}]]></parametersMapExpression>
+                <dataSourceExpression><![CDATA[new JREmptyDataSource()]]></dataSourceExpression>
+                <expression><![CDATA[$P{ExistingReport}]]></expression>
+            </element>
+        </band>
+    </detail>
+</jasperReport>
