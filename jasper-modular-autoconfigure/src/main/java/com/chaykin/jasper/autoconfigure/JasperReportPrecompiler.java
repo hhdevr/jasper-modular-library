@@ -19,16 +19,56 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Scans the configured base package at application startup and precompiles all discovered
+ * JRXML report templates into the shared {@link JasperModularCompiler#CACHE}.
+ *
+ * <p>Precompilation ensures that the first report request in production does not incur
+ * JRXML compilation latency. Templates are compiled once and cached for the lifetime
+ * of the application.</p>
+ *
+ * <p>This component is registered automatically by {@link JasperModularAutoConfiguration}
+ * and runs after the Spring application context is fully initialized (via
+ * {@link ApplicationRunner}).</p>
+ *
+ * <h2>Behavior</h2>
+ * <ul>
+ *   <li>Scans {@link JasperModularProperties#getBasePackage()} for classes annotated with
+ *       {@link JasperModularReport} and {@link JasperSubreport}</li>
+ *   <li>Skips templates that are already present in the cache</li>
+ *   <li>Logs each compiled template with its compilation time in milliseconds</li>
+ *   <li>Logs an error for templates that fail to compile without stopping the application</li>
+ *   <li>Does nothing if {@link JasperModularProperties#isPrecompileEnabled()} is
+ *       {@code false}</li>
+ * </ul>
+ *
+ * @see JasperModularAutoConfiguration
+ * @see JasperModularProperties
+ * @see JasperModularCompiler#CACHE
+ */
 public class JasperReportPrecompiler implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(JasperReportPrecompiler.class);
 
     private final JasperModularProperties properties;
 
+    /**
+     * Constructs a new precompiler with the given configuration properties.
+     *
+     * @param properties the jasper-modular configuration properties
+     */
     public JasperReportPrecompiler(JasperModularProperties properties) {
         this.properties = properties;
     }
 
+    /**
+     * Entry point called by Spring Boot after the application context is ready.
+     *
+     * <p>Triggers precompilation if {@link JasperModularProperties#isPrecompileEnabled()}
+     * is {@code true}. Otherwise logs a message and returns immediately.</p>
+     *
+     * @param args the application arguments (not used)
+     */
     @Override
     public void run(ApplicationArguments args) {
         if (!properties.isPrecompileEnabled()) {
@@ -38,6 +78,9 @@ public class JasperReportPrecompiler implements ApplicationRunner {
         precompileAll();
     }
 
+    /**
+     * Scans for report classes, compiles all discovered templates, and logs the summary.
+     */
     private void precompileAll() {
         List<String> paths = scanTemplatePaths();
 
@@ -56,6 +99,13 @@ public class JasperReportPrecompiler implements ApplicationRunner {
         log.info("Precompilation complete - {} ms", ms);
     }
 
+    /**
+     * Scans the configured base package for all classes annotated with
+     * {@link JasperModularReport} or {@link JasperSubreport} and collects their template
+     * paths.
+     *
+     * @return a list of JRXML template paths to precompile; never {@code null}
+     */
     private List<String> scanTemplatePaths() {
         ClassPathScanningCandidateComponentProvider scanner =
                 new ClassPathScanningCandidateComponentProvider(false);
@@ -85,6 +135,15 @@ public class JasperReportPrecompiler implements ApplicationRunner {
         return paths;
     }
 
+    /**
+     * Compiles the JRXML template at the given classpath path and stores it in the cache.
+     *
+     * <p>If the template is already cached, this method returns immediately. Compilation
+     * failures are logged as errors but do not propagate - the application continues to
+     * start normally and compilation will be retried lazily on first use.</p>
+     *
+     * @param path the classpath-relative JRXML path, e.g. {@code /reports/invoice.jrxml}
+     */
     private void compileAndCache(String path) {
         long start = System.nanoTime();
         try {

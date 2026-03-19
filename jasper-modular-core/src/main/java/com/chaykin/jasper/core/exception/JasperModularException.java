@@ -10,7 +10,7 @@ public class JasperModularException extends RuntimeException {
     }
 
     public JasperModularException(String message, Throwable cause) {
-        super(message + "| cause: " + cause.getMessage(), cause);
+        super(message, cause);
     }
 
     public JasperModularException(Throwable cause) {
