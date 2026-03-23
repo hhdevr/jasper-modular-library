@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.hhdevr</groupId>
+        <artifactId>jasper-modular-parent</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jasper-modular-starter-jr6</artifactId>
+    <name>Jasper Modular Starter (JasperReports 6.x)</name>
+    <description>
+        Spring Boot starter for jasper-modular. This is the ONLY dependency you need.
+        Compatible with JasperReports 6.x and older versions (4.x, 5.x).
+        For JasperReports 7.x use jasper-modular-starter-jr7.
+    </description>
+
+    <properties>
+        <jasperreports.version>6.21.5</jasperreports.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>net.sf.jasperreports</groupId>
+            <artifactId>jasperreports</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.hhdevr</groupId>
+            <artifactId>jasper-modular-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.hhdevr</groupId>
+            <artifactId>jasper-modular-autoconfigure</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.hhdevr</groupId>
+            <artifactId>jasper-modular-processor-jr6</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+</project>

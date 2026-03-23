@@ -24,7 +24,7 @@ public enum GenerationMode {
     /**
      * Creates a new JRXML file from scratch using a built-in blank template.
      *
-     * <p>The processor loads the default blank template (e.g. {@code Blank_A4.jrxml})
+     * <p>The processor loads the default blank template (e.g. {@code Portrait.jrxml})
      * and injects all discovered parameters, datasets, list components and subreport bands
      * derived from the annotated class fields. If a file already exists at the target path,
      * it will be overwritten.</p>

@@ -11,28 +11,33 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jasper-modular-core</artifactId>
-    <name>Jasper Modular Core</name>
-    <description>Core interfaces and abstractions for modular JasperReports subreport management
+    <artifactId>jasper-modular-starter-jr7</artifactId>
+    <name>Jasper Modular Starter (JasperReports 7.x)</name>
+    <description>
+        Spring Boot starter for jasper-modular. This is the ONLY dependency you need.
+        Compatible with JasperReports 7.x. For JasperReports 6.x use jasper-modular-starter-jr6.
     </description>
 
     <dependencies>
         <dependency>
             <groupId>net.sf.jasperreports</groupId>
             <artifactId>jasperreports</artifactId>
-            <scope>provided</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
+            <groupId>io.github.hhdevr</groupId>
+            <artifactId>jasper-modular-core</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
+            <groupId>io.github.hhdevr</groupId>
+            <artifactId>jasper-modular-autoconfigure</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.hhdevr</groupId>
+            <artifactId>jasper-modular-processor-jr7</artifactId>
+            <optional>true</optional>
         </dependency>
     </dependencies>
 
