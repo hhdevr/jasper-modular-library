@@ -7,13 +7,16 @@
     <parent>
         <groupId>io.github.hhdevr</groupId>
         <artifactId>jasper-modular-parent</artifactId>
-        <version>0.3.0</version>
+        <version>0.3.1</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>jasper-modular-starter</artifactId>
-    <name>Jasper Modular Starter</name>
-    <description>Spring Boot starter for jasper-modular</description>
+    <name>Jasper Modular Starter (use this)</name>
+    <description>
+        Single entry-point dependency for jasper-modular. Pulls in all required modules.
+        Do not add jasper-modular-core or jasper-modular-autoconfigure separately.
+    </description>
 
     <dependencies>
         <dependency>

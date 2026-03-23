@@ -9,7 +9,9 @@ import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Base class responsible for building the JasperReports parameters map from the fields
@@ -34,6 +36,12 @@ import java.util.Map;
  *       Collections of subreport types are not supported and will throw at runtime.</li>
  *   <li>All other non-null fields are stored as plain parameters under the field name.</li>
  * </ul>
+ *
+ * <h2>Circular dependency detection</h2>
+ * <p>The recursive subreport filling is protected against circular dependencies.
+ * If a cycle is detected (e.g. {@code A -> B -> A}), a {@link JasperModularException}
+ * is thrown immediately with a clear message identifying the offending class,
+ * rather than allowing a {@code StackOverflowError} to propagate.</p>
  */
 public class JasperModularDataFiller {
 
@@ -58,52 +66,104 @@ public class JasperModularDataFiller {
      * (but not including) {@link JasperModularDataFiller} itself. Fields are processed
      * according to the rules described in the class-level documentation.</p>
      *
+     * <p>This method initialises a fresh visited set for circular dependency tracking
+     * and delegates to {@link #fillMapParameters(Set)}.</p>
+     *
      * @return a non-null map of parameter names to their values, ready for use with
      * {@code JasperFillManager}
      * @throws JasperModularException if a field cannot be accessed via reflection,
      *                                if a subreport compilation fails,
+     *                                if a circular subreport dependency is detected,
      *                                or if a {@code List} of subreport modules is detected
      */
     public Map<String, Object> fillMapParameters() {
+        return fillMapParameters(new HashSet<>());
+    }
+
+    /**
+     * Internal recursive implementation of {@link #fillMapParameters()}.
+     *
+     * <p>The {@code visited} set tracks which report classes have already been entered
+     * in the current call stack. If a class is encountered a second time, a circular
+     * dependency is detected and a {@link JasperModularException} is thrown.</p>
+     *
+     * <p>For each field in the class hierarchy, processing is delegated to
+     * {@link #processField(Field, Set)} which handles type detection and routing.</p>
+     *
+     * @param visited the set of report classes already visited in the current call stack
+     * @return a non-null map of parameter names to their values
+     * @throws JasperModularException if a circular subreport dependency is detected
+     */
+    private Map<String, Object> fillMapParameters(Set<Class<?>> visited) {
+        if (!visited.add(this.getClass())) {
+            throw new JasperModularException(
+                    "Circular subreport dependency detected at: "
+                    + this.getClass().getSimpleName()
+                    + ". Visited chain: " + visited.stream()
+                                                   .map(Class::getSimpleName)
+                                                   .reduce((a, b) -> a + " -> " + b)
+                                                   .orElse(""));
+        }
+
         parameters = new HashMap<>();
 
         Class<?> clazz = this.getClass();
-
         while (clazz != null && clazz != JasperModularDataFiller.class) {
             for (Field field: clazz.getDeclaredFields()) {
-                if (field.isAnnotationPresent(JasperIgnore.class)) {
-                    continue;
-                }
-
-                field.setAccessible(true);
-                try {
-                    Object value = field.get(this);
-                    if (value == null) {
-                        continue;
-                    }
-
-                    JasperSubreport ann = field.getType().getAnnotation(JasperSubreport.class);
-
-                    if (ann != null) {
-                        putSubreport(field, (JasperModularCompiler) value, ann);
-                        continue;
-                    }
-
-                    if (Collection.class.isAssignableFrom(field.getType())) {
-                        validateCollectionElementType(field);
-                        putCollection(field.getName(), (Collection<?>) value);
-                    } else {
-                        putParameter(field.getName(), value);
-                    }
-
-                } catch (IllegalAccessException e) {
-                    throw new JasperModularException(
-                            "Failed to access field: " + field.getName(), e);
-                }
+                processField(field, visited);
             }
             clazz = clazz.getSuperclass();
         }
+
         return parameters;
+    }
+
+    /**
+     * Processes a single field: reads its value and routes it to the appropriate
+     * handler based on its type.
+     *
+     * <p>Fields annotated with {@link JasperIgnore} or holding a {@code null} value
+     * are skipped silently. Otherwise the field is routed to one of:</p>
+     * <ul>
+     *   <li>{@link #putSubreport} - if the field type carries {@link JasperSubreport}</li>
+     *   <li>{@link #putCollection} - if the field type is a {@link Collection}</li>
+     *   <li>{@link #putParameter} - for all other scalar values</li>
+     * </ul>
+     *
+     * @param field   the field to process
+     * @param visited the set of already-visited classes, forwarded for subreport recursion
+     * @throws JasperModularException if the field cannot be accessed via reflection,
+     *                                or if a collection of subreport modules is detected
+     */
+    private void processField(Field field, Set<Class<?>> visited) {
+        if (field.isAnnotationPresent(JasperIgnore.class)) {
+            return;
+        }
+
+        field.setAccessible(true);
+        try {
+            Object value = field.get(this);
+            if (value == null) {
+                return;
+            }
+
+            JasperSubreport ann = field.getType().getAnnotation(JasperSubreport.class);
+            if (ann != null) {
+                putSubreport(field, (JasperModularCompiler) value, ann, visited);
+                return;
+            }
+
+            if (Collection.class.isAssignableFrom(field.getType())) {
+                validateCollectionElementType(field);
+                putCollection(field.getName(), (Collection<?>) value);
+            } else {
+                putParameter(field.getName(), value);
+            }
+
+        } catch (IllegalAccessException e) {
+            throw new JasperModularException(
+                    "Failed to access field: " + field.getName(), e);
+        }
     }
 
     /**
@@ -135,17 +195,22 @@ public class JasperModularDataFiller {
      *   <li>{@code <prefix>MapParameter} - the subreport's filled parameters map</li>
      * </ul>
      *
-     * @param field  the field holding the subreport module instance
-     * @param module the subreport module
-     * @param ann    the {@link JasperSubreport} annotation on the subreport's class
+     * <p>The {@code visited} set is forwarded into the recursive call to enable
+     * circular dependency detection across the full subreport chain.</p>
+     *
+     * @param field   the field holding the subreport module instance
+     * @param module  the subreport module
+     * @param ann     the {@link JasperSubreport} annotation on the subreport's class
+     * @param visited the set of already-visited classes in the current call stack
      */
-    private void putSubreport(Field field, JasperModularCompiler module, JasperSubreport ann) {
+    private void putSubreport(Field field, JasperModularCompiler module,
+                              JasperSubreport ann, Set<Class<?>> visited) {
         String prefix = ann.prefix().isEmpty()
                         ? field.getType().getSimpleName()
                         : ann.prefix();
         parameters.put(prefix + "Report", module.compileReport());
         parameters.put(prefix + "MapParameter",
-                       ((JasperModularDataFiller) module).fillMapParameters());
+                       ((JasperModularDataFiller) module).fillMapParameters(visited));
     }
 
     /**
@@ -174,4 +239,5 @@ public class JasperModularDataFiller {
             parameters.put(key, new JRBeanCollectionDataSource(data));
         }
     }
+
 }
