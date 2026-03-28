@@ -15,7 +15,6 @@ import com.chaykin.jasper.core.contract.JasperModularDataFiller;
  * <ol>
  *   <li>Extend {@code SubreportModule}</li>
  *   <li>Be annotated with {@link com.chaykin.jasper.core.annotation.JasperSubreport}</li>
- *   <li>Implement {@link #getRootReport()} to declare which root report owns this subreport</li>
  *   <li>Implement {@link #isEmpty()} to signal whether the subreport has renderable content</li>
  * </ol>
  *
@@ -31,9 +30,6 @@ import com.chaykin.jasper.core.contract.JasperModularDataFiller;
  *
  *     private List<Item> items;
  *     private BigDecimal subtotal;
- *
- *     @Override
- *     public Class<?> getRootReport() { return InvoiceReport.class; }
  *
  *     @Override
  *     public boolean isEmpty() { return items == null || items.isEmpty(); }
@@ -53,13 +49,6 @@ public abstract class SubreportModule
      */
     protected SubreportModule() {
     }
-
-    /**
-     * Returns the class of the root report that this subreport belongs to.
-     *
-     * @return the root report class that owns this subreport
-     */
-    public abstract Class<?> getRootReport();
 
     /**
      * Returns {@code true} if this subreport contains no renderable data.
