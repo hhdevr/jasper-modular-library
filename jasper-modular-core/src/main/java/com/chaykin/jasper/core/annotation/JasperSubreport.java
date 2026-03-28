@@ -31,9 +31,6 @@ import java.lang.annotation.Target;
  *     private BigDecimal subtotal;
  *
  *     @Override
- *     public Class<?> getRootReport() { return InvoiceReport.class; }
- *
- *     @Override
  *     public boolean isEmpty() { return items == null || items.isEmpty(); }
  * }
  * }</pre>
@@ -41,6 +38,7 @@ import java.lang.annotation.Target;
  * @see com.chaykin.jasper.core.model.SubreportModule
  * @see JasperModularReport
  * @see GenerationMode
+ * @see PageOrientation
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
@@ -82,4 +80,19 @@ public @interface JasperSubreport {
      * @see GenerationMode
      */
     GenerationMode mode() default GenerationMode.INJECT;
+
+    /**
+     * The page orientation for the blank template used during JRXML generation.
+     *
+     * <p>Controls whether the processor picks {@code Portrait.jrxml} (portrait) or
+     * {@code Landscape.jrxml} (landscape) as the starting point. Has no effect
+     * on existing templates in {@link GenerationMode#INJECT} mode when the template file
+     * is already present on the classpath.</p>
+     *
+     * <p>Defaults to {@link PageOrientation#PORTRAIT}.</p>
+     *
+     * @return the page orientation
+     * @see PageOrientation
+     */
+    PageOrientation orientation() default PageOrientation.PORTRAIT;
 }

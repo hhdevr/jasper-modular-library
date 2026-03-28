@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.hhdevr</groupId>
         <artifactId>jasper-modular-parent</artifactId>
-        <version>0.3.0</version>
+        <version>1.0.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -17,21 +17,30 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.github.hhdevr</groupId>
-            <artifactId>jasper-modular-core</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
         </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-configuration-processor</artifactId>
             <optional>true</optional>
         </dependency>
+
+        <dependency>
+            <groupId>net.sf.jasperreports</groupId>
+            <artifactId>jasperreports</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.github.hhdevr</groupId>
+            <artifactId>jasper-modular-core</artifactId>
         </dependency>
     </dependencies>
 

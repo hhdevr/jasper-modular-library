@@ -29,8 +29,18 @@ import java.lang.annotation.Target;
  * }
  * }</pre>
  *
+ * <h2>Landscape example</h2>
+ * <pre>{@code
+ * @JasperModularReport(
+ *     templatePath = "/reports/wide_report.jrxml",
+ *     orientation = PageOrientation.LANDSCAPE
+ * )
+ * public class WideReport extends ModularReport { ... }
+ * }</pre>
+ *
  * @see com.chaykin.jasper.core.model.ModularReport
  * @see GenerationMode
+ * @see PageOrientation
  * @see JasperSubreport
  */
 @Retention(RetentionPolicy.RUNTIME)
@@ -59,4 +69,19 @@ public @interface JasperModularReport {
      * @see GenerationMode
      */
     GenerationMode mode() default GenerationMode.INJECT;
+
+    /**
+     * The page orientation for the blank template used during JRXML generation.
+     *
+     * <p>Controls whether the processor picks {@code Portrait.jrxml} (portrait) or
+     * {@code Landscape.jrxml} (landscape) as the starting point. Has no effect
+     * on existing templates in {@link GenerationMode#INJECT} mode when the template file
+     * is already present on the classpath.</p>
+     *
+     * <p>Defaults to {@link PageOrientation#PORTRAIT}.</p>
+     *
+     * @return the page orientation
+     * @see PageOrientation
+     */
+    PageOrientation orientation() default PageOrientation.PORTRAIT;
 }

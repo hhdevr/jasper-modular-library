@@ -26,6 +26,7 @@ final class JasperModularDataFillerFixture {
             this.name = name;
             this.amount = amount;
         }
+
     }
 
     @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Items")
@@ -36,10 +37,8 @@ final class JasperModularDataFillerFixture {
         ItemsModule(String title) {this.title = title;}
 
         @Override
-        public Class<?> getRootReport() {return ScalarReport.class;}
-
-        @Override
         public boolean isEmpty() {return false;}
+
     }
 
     @JasperSubreport(templatePath = "/reports/other.jrxml")
@@ -48,9 +47,6 @@ final class JasperModularDataFillerFixture {
         String note;
 
         OtherModule(String note) {this.note = note;}
-
-        @Override
-        public Class<?> getRootReport() {return ScalarReport.class;}
 
         @Override
         public boolean isEmpty() {return false;}
@@ -73,6 +69,7 @@ final class JasperModularDataFillerFixture {
 
         String present = "hello";
         String absent = null;
+
     }
 
     @JasperModularReport(templatePath = "/reports/ignored.jrxml")
@@ -82,6 +79,7 @@ final class JasperModularDataFillerFixture {
 
         @JasperIgnore
         String hidden = "no";
+
     }
 
     @JasperModularReport(templatePath = "/reports/collection.jrxml")
@@ -90,6 +88,7 @@ final class JasperModularDataFillerFixture {
         List<LineItem> items;
 
         CollectionReport(List<LineItem> items) {this.items = items;}
+
     }
 
     @JasperModularReport(templatePath = "/reports/subreport.jrxml")
@@ -98,6 +97,7 @@ final class JasperModularDataFillerFixture {
         ItemsModule itemsModule;
 
         SubreportReport(ItemsModule module) {this.itemsModule = module;}
+
     }
 
     @JasperModularReport(templatePath = "/reports/prefix.jrxml")
@@ -125,12 +125,14 @@ final class JasperModularDataFillerFixture {
     static class ParentReport extends ModularReport {
 
         String parentField = "fromParent";
+
     }
 
     @JasperModularReport(templatePath = "/reports/child.jrxml")
     static class ChildReport extends ParentReport {
 
         String childField = "fromChild";
+
     }
 
     @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
@@ -139,6 +141,7 @@ final class JasperModularDataFillerFixture {
         List<ItemsModule> modules;
 
         SubreportListReport(List<ItemsModule> modules) {this.modules = modules;}
+
     }
 
     @JasperModularReport(templatePath = "/reports/multi.jrxml")
@@ -151,12 +154,14 @@ final class JasperModularDataFillerFixture {
             this.itemsModule = items;
             this.otherModule = other;
         }
+
     }
 
     @JasperModularReport(templatePath = "/reports/nullsubreport.jrxml")
     static class NullSubreportReport extends ModularReport {
 
         ItemsModule itemsModule = null;
+
     }
 
 }
