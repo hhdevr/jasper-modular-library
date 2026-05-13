@@ -25,18 +25,29 @@ Java-объектами, а JRXML содержит только дизайн.
 
 **Чем это отличается от всего остального**
 
-Каждый субрепорт в jasper-modular всегда порождает ровно два параметра в корневом JRXML —
-скомпилированный объект отчёта и мапу с данными. Оба формируются автоматически из полей Java-класса
-во время компиляции: вы не объявляете их, не прокидываете их, не думаете о них. К тому моменту как
-вы открываете шаблон в Jaspersoft Studio, параметры уже на месте. Вы просто работаете со своими
-данными.
+В стандартном JasperReports данные в субрепорт обычно передаются поштучно: каждое поле,
+необходимое субрепорту, нужно отдельно объявить в JRXML родительского отчёта и прокинуть вручную —
+по одному `<subreportParameter>` на поле, по одному `params.put()` на поле в Java. При большом
+количестве субрепортов это быстро превращается в десятки ручных записей в нескольких файлах.
+
+jasper-modular использует другой приём: каждый субрепорт всегда получает ровно два параметра —
+скомпилированный объект отчёта (`<prefix>Report`) и единую `Map<String, Object>`
+(`<prefix>MapParameter`), содержащую все данные субрепорта. Внутри субрепорта мапа автоматически
+распаковывается в отдельные параметры через встроенный механизм JasperReports
+`REPORT_PARAMETERS_MAP`. Это малоизвестная возможность JasperReports, которая полностью устраняет
+поштучный дриллинг параметров.
+
+Оба параметра формируются автоматически из полей Java-класса во время компиляции: вы не объявляете
+их, не прокидываете их, не думаете о них. К тому моменту как вы открываете шаблон в Jaspersoft
+Studio, параметры уже на месте. Вы просто работаете со своими данными.
 
 ---
 
 ## Какую проблему решает
 
 Работа с JasperReports в целом болезненна — передавать данные в шаблон и корректно их обрабатывать
-сложно на каждом уровне. Модульность через субрепорты — лучший способ это упорядочить, но стандартного
+сложно на каждом уровне. Модульность через субрепорты — лучший способ это упорядочить, но
+стандартного
 механизма для удобной работы с ними нет. Каждый проект решает это по-своему, и почти каждый подход
 порождает свои проблемы:
 
@@ -62,7 +73,8 @@ JRXML корневого отчёта, JRXML субрепорта — расси
 - Корневой отчёт — это просто Java-класс с аннотацией `@JasperModularReport`
 - Субрепорт — это просто поле в Java-классе с аннотацией `@JasperSubreport`
 - Аннотационный процессор сам генерирует все параметры и датасеты в JRXML при компиляции
-- Рантайм сам компилирует, заполняет и собирает весь отчёт целиком — включая все субрепорты и их данные — никакого ручного boilerplate
+- Рантайм сам компилирует, заполняет и собирает весь отчёт целиком — включая все субрепорты и их
+  данные — никакого ручного boilerplate
 - Все данные передаются через типизированные POJO-DTO — JRXML содержит только дизайн
 - Построение отдельных компонентов отчёта и их переиспользование становится простым и естественным,
   что облегчает работу с JasperReports в целом
@@ -86,6 +98,7 @@ JRXML корневого отчёта, JRXML субрепорта — расси
 **JasperReports 7.x:**
 
 ```xml
+
 <dependency>
     <groupId>io.github.hhdevr</groupId>
     <artifactId>jasper-modular-starter-jr7</artifactId>
@@ -96,6 +109,7 @@ JRXML корневого отчёта, JRXML субрепорта — расси
 **JasperReports 6.x и старше (4.x, 5.x):**
 
 ```xml
+
 <dependency>
     <groupId>io.github.hhdevr</groupId>
     <artifactId>jasper-modular-starter-jr6</artifactId>
@@ -109,6 +123,7 @@ JRXML корневого отчёта, JRXML субрепорта — расси
 **JasperReports 7.x:**
 
 ```xml
+
 <plugin>
     <groupId>org.apache.maven.plugins</groupId>
     <artifactId>maven-compiler-plugin</artifactId>
@@ -127,6 +142,7 @@ JRXML корневого отчёта, JRXML субрепорта — расси
 **JasperReports 6.x и старше:**
 
 ```xml
+
 <plugin>
     <groupId>org.apache.maven.plugins</groupId>
     <artifactId>maven-compiler-plugin</artifactId>
@@ -145,6 +161,7 @@ JRXML корневого отчёта, JRXML субрепорта — расси
 Для экспорта в PDF добавьте расширение JasperReports (не включено в стартер намеренно):
 
 ```xml
+
 <dependency>
     <groupId>net.sf.jasperreports</groupId>
     <artifactId>jasperreports-pdf</artifactId>
@@ -159,6 +176,7 @@ JRXML корневого отчёта, JRXML субрепорта — расси
 ### 1. Создайте модуль субрепорта
 
 ```java
+
 @Getter
 @Setter
 @JasperSubreport(templatePath = "/reports/sub_items.jrxml", prefix = "Items")
@@ -168,13 +186,14 @@ public class ItemsModule extends SubreportModule {
     private BigDecimal subtotal;
 
     @Override
-    public boolean isEmpty() { return items == null || items.isEmpty(); }
+    public boolean isEmpty() {return items == null || items.isEmpty();}
 }
 ```
 
 ### 2. Создайте корневой отчёт
 
 ```java
+
 @Getter
 @Setter
 @JasperModularReport(templatePath = "/reports/invoice.jrxml")
@@ -193,10 +212,18 @@ public class InvoiceReport extends ModularReport {
 ItemsModule items = new ItemsModule(lineItems, subtotal);
 
 InvoiceReport report = new InvoiceReport();
-report.setCustomerName("Acme Corp");
-report.setInvoiceNumber("INV-001");
-report.setTotal(BigDecimal.valueOf(1500.00));
-report.setItemsModule(items);
+report.
+
+setCustomerName("Acme Corp");
+report.
+
+setInvoiceNumber("INV-001");
+report.
+
+setTotal(BigDecimal.valueOf(1500.00));
+        report.
+
+setItemsModule(items);
 
 JasperPrint print = new JasperModularRenderer<>().render(report);
 ```
@@ -206,9 +233,15 @@ JasperPrint print = new JasperModularRenderer<>().render(report);
 ```java
 ByteArrayOutputStream out = new ByteArrayOutputStream();
 JRPdfExporter exporter = new JRPdfExporter();
-exporter.setExporterInput(new SimpleExporterInput(print));
-exporter.setExporterOutput(new SimpleOutputStreamExporterOutput(out));
-exporter.exportReport();
+exporter.
+
+setExporterInput(new SimpleExporterInput(print));
+        exporter.
+
+setExporterOutput(new SimpleOutputStreamExporterOutput(out));
+        exporter.
+
+exportReport();
 
 byte[] pdf = out.toByteArray();
 ```
@@ -427,10 +460,10 @@ jasper:
 
 Помечает класс как корневой отчёт. Класс должен наследовать `ModularReport`.
 
-| Атрибут        | Тип               | Обязательно | Описание                                     |
-|----------------|-----------------  |-------------|----------------------------------------------|
-| `templatePath` | `String`          | Да          | Путь к JRXML-файлу в classpath               |
-| `mode`         | `GenerationMode`  | Нет         | Стратегия генерации (по умолчанию: `INJECT`) |
+| Атрибут        | Тип               | Обязательно | Описание                                       |
+|----------------|-------------------|-------------|------------------------------------------------|
+| `templatePath` | `String`          | Да          | Путь к JRXML-файлу в classpath                 |
+| `mode`         | `GenerationMode`  | Нет         | Стратегия генерации (по умолчанию: `INJECT`)   |
 | `orientation`  | `PageOrientation` | Нет         | Ориентация страницы (по умолчанию: `PORTRAIT`) |
 
 ### `@JasperSubreport`
@@ -438,7 +471,7 @@ jasper:
 Помечает класс как модуль субрепорта. Класс должен наследовать `SubreportModule`.
 
 | Атрибут        | Тип               | Обязательно | Описание                                                       |
-|----------------|-----------------  |-------------|----------------------------------------------------------------|
+|----------------|-------------------|-------------|----------------------------------------------------------------|
 | `templatePath` | `String`          | Да          | Путь к JRXML-файлу в classpath                                 |
 | `prefix`       | `String`          | Нет         | Префикс для имён параметров (по умолчанию: простое имя класса) |
 | `mode`         | `GenerationMode`  | Нет         | Стратегия генерации (по умолчанию: `INJECT`)                   |
@@ -448,15 +481,16 @@ jasper:
 
 Управляет типом JRXML-компонента для поля-коллекции.
 
-| Атрибут       | Тип                       | Обязательно | Описание                                           |
-|---------------|---------------------------|-------------|--------------------------------------------------  |
-| `type`        | `CollectionComponentType` | Нет         | `LIST` или `TABLE` (по умолчанию: `TABLE`)         |
+| Атрибут       | Тип                       | Обязательно | Описание                                               |
+|---------------|---------------------------|-------------|--------------------------------------------------------|
+| `type`        | `CollectionComponentType` | Нет         | `LIST` или `TABLE` (по умолчанию: `TABLE`)             |
 | `columnWidth` | `int`                     | Нет         | Ширина каждой колонки в пикселях (по умолчанию: `100`) |
 
 Если `@JasperCollection` отсутствует, процессор использует компонент `list` для обратной
 совместимости.
 
 ```java
+
 @JasperCollection(type = CollectionComponentType.TABLE, columnWidth = 80)
 private List<LineItem> items;
 ```
@@ -466,6 +500,7 @@ private List<LineItem> items;
 Ставится на поле, чтобы исключить его из генерации JRXML и заполнения параметров.
 
 ```java
+
 @JasperIgnore
 private transient String internalState;
 ```
@@ -498,6 +533,7 @@ list и table, тогда как JasperReports 7 определяет namespace 
 **XLSX:**
 
 ```xml
+
 <dependency>
     <groupId>net.sf.jasperreports</groupId>
     <artifactId>jasperreports-excel-poi</artifactId>

@@ -18,24 +18,37 @@ There is no built-in mechanism that makes it simple and logical: you have to man
 parameters in the root report's JRXML, keep them in sync with Java code, pass each parameter by
 name — and update everything in multiple places on every change.
 
-jasper-modular solves both problems at once — the data chaos and the subreport complexity. You simply
+jasper-modular solves both problems at once — the data chaos and the subreport complexity. You
+simply
 declare a subreport as a field in a Java class and annotate it — the processor generates the
 required parameters in the JRXML at compile time, and the runtime passes everything automatically.
 Data is described as plain Java objects, and JRXML contains only design.
 
 **What makes this different**
 
-Every subreport in jasper-modular always produces exactly two parameters in the root JRXML — the
-compiled report object and the data map. Both are generated automatically from your Java class
-fields at compile time: you never declare them, you never wire them, you never think about them. By
-the time you open the template in Jaspersoft Studio, the parameters are already there. You just use
-your data.
+In standard JasperReports, subreport data is typically passed parameter-by-parameter: every field
+the subreport needs must be declared individually in the parent JRXML and wired by hand — one
+`<subreportParameter>` per field, one `params.put()` per field in Java. With many subreports this
+quickly becomes dozens of manual entries across multiple files.
+
+jasper-modular uses a different technique: every subreport always receives exactly two parameters —
+the compiled report object (`<prefix>Report`) and a single `Map<String, Object>`
+(`<prefix>MapParameter`) containing all of the subreport's data. Inside the subreport, the map
+is automatically unpacked into individual parameters by JasperReports' built-in
+`REPORT_PARAMETERS_MAP`
+mechanism. This is a little-known JasperReports capability that eliminates parameter-by-parameter
+drilling entirely.
+
+Both parameters are generated automatically from your Java class fields at compile time: you never
+declare them, you never wire them, you never think about them. By the time you open the template in
+Jaspersoft Studio, the parameters are already there. You just use your data.
 
 ---
 
 ## The problem this solves
 
-Working with JasperReports is painful overall — handling data and passing it correctly into templates
+Working with JasperReports is painful overall — handling data and passing it correctly into
+templates
 is difficult at every level. Modularity through subreports is the best way to bring order to this,
 but there is no standard mechanism for working with them conveniently. Every project solves it
 differently, and almost every approach carries its own set of problems:
@@ -63,7 +76,8 @@ the Java class, the root JRXML, and the subreport JRXML — drift and typos are 
 - A root report is just a Java class annotated with `@JasperModularReport`
 - A subreport is just a field in that class annotated with `@JasperSubreport`
 - The annotation processor generates all parameters and datasets in the JRXML at compile time
-- The runtime compiles, fills, and assembles the entire report — including all subreports and their data — no manual boilerplate
+- The runtime compiles, fills, and assembles the entire report — including all subreports and their
+  data — no manual boilerplate
 - All data is passed through typed POJO-DTOs — JRXML contains only design
 - Building individual report components and reusing them across reports becomes simple and natural,
   making the overall experience of working with JasperReports significantly easier
@@ -86,6 +100,7 @@ your JasperReports version — each starter pulls in everything else automatical
 **JasperReports 7.x:**
 
 ```xml
+
 <dependency>
     <groupId>io.github.hhdevr</groupId>
     <artifactId>jasper-modular-starter-jr7</artifactId>
@@ -96,6 +111,7 @@ your JasperReports version — each starter pulls in everything else automatical
 **JasperReports 6.x and older (4.x, 5.x):**
 
 ```xml
+
 <dependency>
     <groupId>io.github.hhdevr</groupId>
     <artifactId>jasper-modular-starter-jr6</artifactId>
@@ -109,6 +125,7 @@ the processor that matches your JasperReports version:
 **JasperReports 7.x:**
 
 ```xml
+
 <plugin>
     <groupId>org.apache.maven.plugins</groupId>
     <artifactId>maven-compiler-plugin</artifactId>
@@ -127,6 +144,7 @@ the processor that matches your JasperReports version:
 **JasperReports 6.x and older:**
 
 ```xml
+
 <plugin>
     <groupId>org.apache.maven.plugins</groupId>
     <artifactId>maven-compiler-plugin</artifactId>
@@ -145,6 +163,7 @@ the processor that matches your JasperReports version:
 For PDF export, add the JasperReports PDF extension (intentionally excluded from the starter):
 
 ```xml
+
 <dependency>
     <groupId>net.sf.jasperreports</groupId>
     <artifactId>jasperreports-pdf</artifactId>
@@ -159,6 +178,7 @@ For PDF export, add the JasperReports PDF extension (intentionally excluded from
 ### 1. Create a subreport module
 
 ```java
+
 @Getter
 @Setter
 @JasperSubreport(templatePath = "/reports/sub_items.jrxml", prefix = "Items")
@@ -168,13 +188,14 @@ public class ItemsModule extends SubreportModule {
     private BigDecimal subtotal;
 
     @Override
-    public boolean isEmpty() { return items == null || items.isEmpty(); }
+    public boolean isEmpty() {return items == null || items.isEmpty();}
 }
 ```
 
 ### 2. Create the root report
 
 ```java
+
 @Getter
 @Setter
 @JasperModularReport(templatePath = "/reports/invoice.jrxml")
@@ -193,10 +214,18 @@ public class InvoiceReport extends ModularReport {
 ItemsModule items = new ItemsModule(lineItems, subtotal);
 
 InvoiceReport report = new InvoiceReport();
-report.setCustomerName("Acme Corp");
-report.setInvoiceNumber("INV-001");
-report.setTotal(BigDecimal.valueOf(1500.00));
-report.setItemsModule(items);
+report.
+
+setCustomerName("Acme Corp");
+report.
+
+setInvoiceNumber("INV-001");
+report.
+
+setTotal(BigDecimal.valueOf(1500.00));
+        report.
+
+setItemsModule(items);
 
 JasperPrint print = new JasperModularRenderer<>().render(report);
 ```
@@ -206,9 +235,15 @@ JasperPrint print = new JasperModularRenderer<>().render(report);
 ```java
 ByteArrayOutputStream out = new ByteArrayOutputStream();
 JRPdfExporter exporter = new JRPdfExporter();
-exporter.setExporterInput(new SimpleExporterInput(print));
-exporter.setExporterOutput(new SimpleOutputStreamExporterOutput(out));
-exporter.exportReport();
+exporter.
+
+setExporterInput(new SimpleExporterInput(print));
+        exporter.
+
+setExporterOutput(new SimpleOutputStreamExporterOutput(out));
+        exporter.
+
+exportReport();
 
 byte[] pdf = out.toByteArray();
 ```
@@ -448,15 +483,16 @@ Marks a class as a subreport module. The class must extend `SubreportModule`.
 
 Controls the JRXML component type for a collection field.
 
-| Attribute     | Type                      | Required | Description                                         |
-|---------------|---------------------------|----------|-----------------------------------------------------|
-| `type`        | `CollectionComponentType` | No       | `LIST` or `TABLE` (default: `TABLE`)                |
-| `columnWidth` | `int`                     | No       | Pixel width of each column (default: `100`)         |
+| Attribute     | Type                      | Required | Description                                 |
+|---------------|---------------------------|----------|---------------------------------------------|
+| `type`        | `CollectionComponentType` | No       | `LIST` or `TABLE` (default: `TABLE`)        |
+| `columnWidth` | `int`                     | No       | Pixel width of each column (default: `100`) |
 
 When `@JasperCollection` is absent, the processor defaults to a `list` component for backwards
 compatibility.
 
 ```java
+
 @JasperCollection(type = CollectionComponentType.TABLE, columnWidth = 80)
 private List<LineItem> items;
 ```
@@ -466,6 +502,7 @@ private List<LineItem> items;
 Place on any field to exclude it from JRXML generation and runtime filling.
 
 ```java
+
 @JasperIgnore
 private transient String internalState;
 ```
@@ -498,6 +535,7 @@ format you need:
 **XLSX:**
 
 ```xml
+
 <dependency>
     <groupId>net.sf.jasperreports</groupId>
     <artifactId>jasperreports-excel-poi</artifactId>
