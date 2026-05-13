@@ -19,8 +19,7 @@ parameters in the root report's JRXML, keep them in sync with Java code, pass ea
 name — and update everything in multiple places on every change.
 
 jasper-modular solves both problems at once — the data chaos and the subreport complexity. You
-simply
-declare a subreport as a field in a Java class and annotate it — the processor generates the
+simply declare a subreport as a field in a Java class and annotate it — the processor generates the
 required parameters in the JRXML at compile time, and the runtime passes everything automatically.
 Data is described as plain Java objects, and JRXML contains only design.
 
@@ -35,9 +34,8 @@ jasper-modular uses a different technique: every subreport always receives exact
 the compiled report object (`<prefix>Report`) and a single `Map<String, Object>`
 (`<prefix>MapParameter`) containing all of the subreport's data. Inside the subreport, the map
 is automatically unpacked into individual parameters by JasperReports' built-in
-`REPORT_PARAMETERS_MAP`
-mechanism. This is a little-known JasperReports capability that eliminates parameter-by-parameter
-drilling entirely.
+`REPORT_PARAMETERS_MAP` mechanism. This is a little-known JasperReports capability that eliminates
+parameter-by-parameter drilling entirely.
 
 Both parameters are generated automatically from your Java class fields at compile time: you never
 declare them, you never wire them, you never think about them. By the time you open the template in
@@ -48,10 +46,9 @@ Jaspersoft Studio, the parameters are already there. You just use your data.
 ## The problem this solves
 
 Working with JasperReports is painful overall — handling data and passing it correctly into
-templates
-is difficult at every level. Modularity through subreports is the best way to bring order to this,
-but there is no standard mechanism for working with them conveniently. Every project solves it
-differently, and almost every approach carries its own set of problems:
+templates is difficult at every level. Modularity through subreports is the best way to bring order
+to this, but there is no standard mechanism for working with them conveniently. Every project solves
+it differently, and almost every approach carries its own set of problems:
 
 **One giant JSON for everything** — data is serialized into a single massive JSON object and passed
 to all subreports via `JsonDataSource`. Subreports extract the data they need using JSON paths
@@ -79,8 +76,7 @@ the Java class, the root JRXML, and the subreport JRXML — drift and typos are 
 - The runtime compiles, fills, and assembles the entire report — including all subreports and their
   data — no manual boilerplate
 - All data is passed through typed POJO-DTOs — JRXML contains only design
-- Building individual report components and reusing them across reports becomes simple and natural,
-  making the overall experience of working with JasperReports significantly easier
+- Building individual report components and reusing them across reports becomes simple and natural
 
 ---
 
@@ -94,38 +90,26 @@ the Java class, the root JRXML, and the subreport JRXML — drift and typos are 
 
 ## Installation
 
-The library provides separate starters for JasperReports 6.x and 7.x. Choose the one that matches
-your JasperReports version — each starter pulls in everything else automatically.
-
-**JasperReports 7.x:**
+Add the starter — it pulls in everything except JasperReports itself, which you provide:
 
 ```xml
-
 <dependency>
     <groupId>io.github.hhdevr</groupId>
-    <artifactId>jasper-modular-starter-jr7</artifactId>
-    <version>1.0.0</version>
+    <artifactId>jasper-modular-starter</artifactId>
+    <version>2.0.0</version>
+</dependency>
+
+<dependency>
+    <groupId>net.sf.jasperreports</groupId>
+    <artifactId>jasperreports</artifactId>
+    <version>${your.jasperreports.version}</version>
 </dependency>
 ```
 
-**JasperReports 6.x and older (4.x, 5.x):**
+Add the annotation processor to the compiler plugin (required for JRXML generation). Pass your
+JasperReports version alongside it so the processor can use the correct API at compile time:
 
 ```xml
-
-<dependency>
-    <groupId>io.github.hhdevr</groupId>
-    <artifactId>jasper-modular-starter-jr6</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
-
-Add the annotation processor to the compiler plugin (required for JRXML generation). Use
-the processor that matches your JasperReports version:
-
-**JasperReports 7.x:**
-
-```xml
-
 <plugin>
     <groupId>org.apache.maven.plugins</groupId>
     <artifactId>maven-compiler-plugin</artifactId>
@@ -133,27 +117,13 @@ the processor that matches your JasperReports version:
         <annotationProcessorPaths>
             <path>
                 <groupId>io.github.hhdevr</groupId>
-                <artifactId>jasper-modular-processor-jr7</artifactId>
-                <version>1.0.0</version>
+                <artifactId>jasper-modular-processor</artifactId>
+                <version>2.0.0</version>
             </path>
-        </annotationProcessorPaths>
-    </configuration>
-</plugin>
-```
-
-**JasperReports 6.x and older:**
-
-```xml
-
-<plugin>
-    <groupId>org.apache.maven.plugins</groupId>
-    <artifactId>maven-compiler-plugin</artifactId>
-    <configuration>
-        <annotationProcessorPaths>
             <path>
-                <groupId>io.github.hhdevr</groupId>
-                <artifactId>jasper-modular-processor-jr6</artifactId>
-                <version>1.0.0</version>
+                <groupId>net.sf.jasperreports</groupId>
+                <artifactId>jasperreports</artifactId>
+                <version>${your.jasperreports.version}</version>
             </path>
         </annotationProcessorPaths>
     </configuration>
@@ -163,11 +133,10 @@ the processor that matches your JasperReports version:
 For PDF export, add the JasperReports PDF extension (intentionally excluded from the starter):
 
 ```xml
-
 <dependency>
     <groupId>net.sf.jasperreports</groupId>
     <artifactId>jasperreports-pdf</artifactId>
-    <version>7.0.6</version> <!-- or 6.21.5 for JR6 -->
+    <version>${your.jasperreports.version}</version>
 </dependency>
 ```
 
@@ -178,7 +147,6 @@ For PDF export, add the JasperReports PDF extension (intentionally excluded from
 ### 1. Create a subreport module
 
 ```java
-
 @Getter
 @Setter
 @JasperSubreport(templatePath = "/reports/sub_items.jrxml", prefix = "Items")
@@ -188,14 +156,13 @@ public class ItemsModule extends SubreportModule {
     private BigDecimal subtotal;
 
     @Override
-    public boolean isEmpty() {return items == null || items.isEmpty();}
+    public boolean isEmpty() { return items == null || items.isEmpty(); }
 }
 ```
 
 ### 2. Create the root report
 
 ```java
-
 @Getter
 @Setter
 @JasperModularReport(templatePath = "/reports/invoice.jrxml")
@@ -214,18 +181,10 @@ public class InvoiceReport extends ModularReport {
 ItemsModule items = new ItemsModule(lineItems, subtotal);
 
 InvoiceReport report = new InvoiceReport();
-report.
-
-setCustomerName("Acme Corp");
-report.
-
-setInvoiceNumber("INV-001");
-report.
-
-setTotal(BigDecimal.valueOf(1500.00));
-        report.
-
-setItemsModule(items);
+report.setCustomerName("Acme Corp");
+report.setInvoiceNumber("INV-001");
+report.setTotal(BigDecimal.valueOf(1500.00));
+report.setItemsModule(items);
 
 JasperPrint print = new JasperModularRenderer<>().render(report);
 ```
@@ -235,15 +194,9 @@ JasperPrint print = new JasperModularRenderer<>().render(report);
 ```java
 ByteArrayOutputStream out = new ByteArrayOutputStream();
 JRPdfExporter exporter = new JRPdfExporter();
-exporter.
-
-setExporterInput(new SimpleExporterInput(print));
-        exporter.
-
-setExporterOutput(new SimpleOutputStreamExporterOutput(out));
-        exporter.
-
-exportReport();
+exporter.setExporterInput(new SimpleExporterInput(print));
+exporter.setExporterOutput(new SimpleOutputStreamExporterOutput(out));
+exporter.exportReport();
 
 byte[] pdf = out.toByteArray();
 ```
@@ -297,16 +250,16 @@ List<RevenueItem> items = revenueRepository.findByPeriod(period);
 double total = items.stream().mapToDouble(RevenueItem::getAmount).sum();
 double growth = calculateGrowth(items);
 
-// Build the module - no SQL in the template
+// Build the module — no SQL in the template
 RevenueModule revenue = new RevenueModule(total, growth, items);
 ```
 
 Benefits of this approach:
 
-- **Readability** - the data structure is described by Java fields, not SQL in XML
-- **Control** - all calculations, formatting, and business logic happen in Java before rendering
-- **Type safety** - the compiler and IDE prevent typos in field names
-- **Testability** - the report model is a plain POJO, easily testable without rendering a PDF
+- **Readability** — the data structure is described by Java fields, not SQL in XML
+- **Control** — all calculations, formatting, and business logic happen in Java before rendering
+- **Type safety** — the compiler and IDE prevent typos in field names
+- **Testability** — the report model is a plain POJO, easily testable without rendering a PDF
 
 ---
 
@@ -325,7 +278,7 @@ classes annotated with `@JasperModularReport` and `@JasperSubreport`. For each c
     - Subreport bands in the `<detail>` section for each subreport field
 4. Writes the updated JRXML to `target/generated-sources`
 
-Existing elements are detected by name and never overwritten - custom layout, styles, and
+Existing elements are detected by name and never overwritten — custom layout, styles, and
 expressions created in Jaspersoft Studio are always preserved.
 
 ### At runtime
@@ -357,7 +310,7 @@ application will not start with broken report templates.
 
 ## Working with JRXML templates
 
-### New report - CREATE mode
+### New report — CREATE mode
 
 When you create a new report class with `mode = GenerationMode.CREATE` and run `mvn compile`, a
 ready-to-use JRXML file appears in `target/generated-sources`. It already contains everything
@@ -371,23 +324,23 @@ needed:
 **Your workflow:**
 
 1. Open the generated file from `target/generated-sources` in Jaspersoft Studio
-2. Add your design - place elements, configure fonts, colors, headers
+2. Add your design — place elements, configure fonts, colors, headers
 3. Save the finished template to `src/main/resources/reports/`
 
-All parameters, datasets, and subreports are already in place - you only need to add the design.
+All parameters, datasets, and subreports are already in place — you only need to add the design.
 
-### Existing report - INJECT mode (default)
+### Existing report — INJECT mode (default)
 
 When you add a new field or a new subreport to an existing report class, the processor generates a
 new file in `target/generated-sources` on the next compile. It contains your original template plus
-only the missing elements - new parameters, datasets, subreports. Everything that was already in the
+only the missing elements — new parameters, datasets, subreports. Everything that was already in the
 template is left untouched.
 
 **Your workflow:**
 
 1. Add a field to the Java class
 2. Run `mvn compile`
-3. Open the updated file from `target/generated-sources` in Jaspersoft Studio - the new parameters
+3. Open the updated file from `target/generated-sources` in Jaspersoft Studio — the new parameters
    are there
 4. Place the new elements in the design and copy the file back to `src/main/resources/reports/`
 
@@ -414,11 +367,11 @@ template is left untouched.
                    your_report.jrxml
                         |
                         v
-              Jaspersoft Studio - add (for CREATE mode)
-                        |         update (for INJECT mode) your design
+              Jaspersoft Studio — add (CREATE) or update (INJECT) your design
+                        |
                         v
               src/main/resources/reports/
-                   your_report.jrxml  <- final template
+                   your_report.jrxml  ← final template
 ```
 
 ---
@@ -428,8 +381,8 @@ template is left untouched.
 | Mode               | Behavior                                                                            |
 |--------------------|-------------------------------------------------------------------------------------|
 | `INJECT` (default) | Injects missing elements into the existing JRXML without touching existing content  |
-| `CREATE`           | Creates a new JRXML from the built-in blank template, overwriting any existing file |
-| `NONE`             | No processing - manage the JRXML entirely by hand                                   |
+| `CREATE`           | Creates a new JRXML from a blank design, overwriting any existing file              |
+| `NONE`             | No processing — manage the JRXML entirely by hand                                   |
 
 ```java
 @JasperModularReport(
@@ -492,7 +445,6 @@ When `@JasperCollection` is absent, the processor defaults to a `list` component
 compatibility.
 
 ```java
-
 @JasperCollection(type = CollectionComponentType.TABLE, columnWidth = 80)
 private List<LineItem> items;
 ```
@@ -502,7 +454,6 @@ private List<LineItem> items;
 Place on any field to exclude it from JRXML generation and runtime filling.
 
 ```java
-
 @JasperIgnore
 private transient String internalState;
 ```
@@ -513,17 +464,11 @@ private transient String internalState;
 
 ```
 jasper-modular-parent
-├── jasper-modular-core              - annotations, contracts, base classes, renderer
-├── jasper-modular-autoconfigure     - Spring Boot autoconfiguration and precompiler
-├── jasper-modular-processor-jr7     - annotation processor for JasperReports 7.x
-├── jasper-modular-processor-jr6     - annotation processor for JasperReports 6.x and older
-├── jasper-modular-starter-jr7       - single dependency entry point for JasperReports 7.x
-└── jasper-modular-starter-jr6       - single dependency entry point for JasperReports 6.x and older
+├── jasper-modular-core              — annotations, contracts, base classes, renderer
+├── jasper-modular-autoconfigure     — Spring Boot autoconfiguration and precompiler
+├── jasper-modular-processor         — annotation processor (JasperReports 6.x and 7.x)
+└── jasper-modular-starter           — single dependency entry point
 ```
-
-The core, autoconfigure, and renderer modules are shared between both versions. Only the annotation
-processor differs — JasperReports 6 requires explicit `ComponentKey` for list and table component
-serialization, while JasperReports 7 infers the namespace automatically.
 
 ---
 
@@ -535,11 +480,10 @@ format you need:
 **XLSX:**
 
 ```xml
-
 <dependency>
     <groupId>net.sf.jasperreports</groupId>
     <artifactId>jasperreports-excel-poi</artifactId>
-    <version>7.0.6</version>
+    <version>${your.jasperreports.version}</version>
 </dependency>
 ```
 
@@ -550,7 +494,7 @@ the core `jasperreports` jar without any additional dependency.
 
 ## License
 
-Apache License 2.0 - see [LICENSE](LICENSE).
+Apache License 2.0 — see [LICENSE](LICENSE).
 
 ---
 
