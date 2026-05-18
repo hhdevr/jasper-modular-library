@@ -25,20 +25,30 @@ Java-объектами, а JRXML содержит только дизайн.
 
 **Чем это отличается от всего остального**
 
-Каждый субрепорт в jasper-modular всегда порождает ровно два параметра в корневом JRXML —
-скомпилированный объект отчёта и мапу с данными. Оба формируются автоматически из полей Java-класса
-во время компиляции: вы не объявляете их, не прокидываете их, не думаете о них. К тому моменту как
-вы открываете шаблон в Jaspersoft Studio, параметры уже на месте. Вы просто работаете со своими
-данными.
+В стандартном JasperReports данные в субрепорт обычно передаются поштучно: каждое поле,
+необходимое субрепорту, нужно отдельно объявить в JRXML родительского отчёта и прокинуть вручную —
+по одному `<subreportParameter>` на поле, по одному `params.put()` на поле в Java. При большом
+количестве субрепортов это быстро превращается в десятки ручных записей в нескольких файлах.
+
+jasper-modular использует другой приём: каждый субрепорт всегда получает ровно два параметра —
+скомпилированный объект отчёта (`<prefix>Report`) и единую `Map<String, Object>`
+(`<prefix>MapParameter`), содержащую все данные субрепорта. Внутри субрепорта мапа автоматически
+распаковывается в отдельные параметры через встроенный механизм JasperReports
+`REPORT_PARAMETERS_MAP`. Это малоизвестная возможность JasperReports, которая полностью устраняет
+поштучный дриллинг параметров.
+
+Оба параметра формируются автоматически из полей Java-класса во время компиляции: вы не объявляете
+их, не прокидываете их, не думаете о них. К тому моменту как вы открываете шаблон в Jaspersoft
+Studio, параметры уже на месте. Вы просто работаете со своими данными.
 
 ---
 
 ## Какую проблему решает
 
 Работа с JasperReports в целом болезненна — передавать данные в шаблон и корректно их обрабатывать
-сложно на каждом уровне. Модульность через субрепорты — лучший способ это упорядочить, но стандартного
-механизма для удобной работы с ними нет. Каждый проект решает это по-своему, и почти каждый подход
-порождает свои проблемы:
+сложно на каждом уровне. Модульность через субрепорты — лучший способ это упорядочить, но
+стандартного механизма для удобной работы с ними нет. Каждый проект решает это по-своему, и почти
+каждый подход порождает свои проблемы:
 
 **Единый JSON на всех** — данные сериализуются в один гигантский JSON-объект, который передаётся во
 все субрепорты через `JsonDataSource`. Субрепорты вытаскивают нужные данные через JSON-путь прямо в
@@ -62,10 +72,10 @@ JRXML корневого отчёта, JRXML субрепорта — расси
 - Корневой отчёт — это просто Java-класс с аннотацией `@JasperModularReport`
 - Субрепорт — это просто поле в Java-классе с аннотацией `@JasperSubreport`
 - Аннотационный процессор сам генерирует все параметры и датасеты в JRXML при компиляции
-- Рантайм сам компилирует, заполняет и собирает весь отчёт целиком — включая все субрепорты и их данные — никакого ручного boilerplate
+- Рантайм сам компилирует, заполняет и собирает весь отчёт целиком — включая все субрепорты и их
+  данные — никакого ручного boilerplate
 - Все данные передаются через типизированные POJO-DTO — JRXML содержит только дизайн
-- Построение отдельных компонентов отчёта и их переиспользование становится простым и естественным,
-  что облегчает работу с JasperReports в целом
+- Построение отдельных компонентов отчёта и их переиспользование становится простым и естественным
 
 ---
 
@@ -79,34 +89,25 @@ JRXML корневого отчёта, JRXML субрепорта — расси
 
 ## Подключение
 
-Библиотека предоставляет отдельные стартеры для JasperReports 6.x и 7.x. Выберите тот, который
-соответствует вашей версии JasperReports — каждый стартер автоматически подтягивает все остальные
-модули.
-
-**JasperReports 7.x:**
+Добавьте стартер — он подтягивает всё необходимое кроме самого JasperReports, который вы указываете
+сами:
 
 ```xml
 <dependency>
     <groupId>io.github.hhdevr</groupId>
-    <artifactId>jasper-modular-starter-jr7</artifactId>
-    <version>1.0.0</version>
+    <artifactId>jasper-modular-starter</artifactId>
+    <version>2.0.0</version>
 </dependency>
-```
 
-**JasperReports 6.x и старше (4.x, 5.x):**
-
-```xml
 <dependency>
-    <groupId>io.github.hhdevr</groupId>
-    <artifactId>jasper-modular-starter-jr6</artifactId>
-    <version>1.0.0</version>
+    <groupId>net.sf.jasperreports</groupId>
+    <artifactId>jasperreports</artifactId>
+    <version>${your.jasperreports.version}</version>
 </dependency>
 ```
 
-Добавьте аннотационный процессор в плагин компилятора (обязательно для генерации JRXML).
-Используйте процессор, соответствующий вашей версии JasperReports:
-
-**JasperReports 7.x:**
+Добавьте аннотационный процессор в плагин компилятора (обязательно для генерации JRXML). Передайте
+вашу версию JasperReports рядом — процессор использует её API во время компиляции:
 
 ```xml
 <plugin>
@@ -116,26 +117,13 @@ JRXML корневого отчёта, JRXML субрепорта — расси
         <annotationProcessorPaths>
             <path>
                 <groupId>io.github.hhdevr</groupId>
-                <artifactId>jasper-modular-processor-jr7</artifactId>
-                <version>1.0.0</version>
+                <artifactId>jasper-modular-processor</artifactId>
+                <version>2.0.0</version>
             </path>
-        </annotationProcessorPaths>
-    </configuration>
-</plugin>
-```
-
-**JasperReports 6.x и старше:**
-
-```xml
-<plugin>
-    <groupId>org.apache.maven.plugins</groupId>
-    <artifactId>maven-compiler-plugin</artifactId>
-    <configuration>
-        <annotationProcessorPaths>
             <path>
-                <groupId>io.github.hhdevr</groupId>
-                <artifactId>jasper-modular-processor-jr6</artifactId>
-                <version>1.0.0</version>
+                <groupId>net.sf.jasperreports</groupId>
+                <artifactId>jasperreports</artifactId>
+                <version>${your.jasperreports.version}</version>
             </path>
         </annotationProcessorPaths>
     </configuration>
@@ -148,7 +136,7 @@ JRXML корневого отчёта, JRXML субрепорта — расси
 <dependency>
     <groupId>net.sf.jasperreports</groupId>
     <artifactId>jasperreports-pdf</artifactId>
-    <version>7.0.6</version> <!-- или 6.21.5 для JR6 -->
+    <version>${your.jasperreports.version}</version>
 </dependency>
 ```
 
@@ -262,16 +250,16 @@ List<RevenueItem> items = revenueRepository.findByPeriod(period);
 double total = items.stream().mapToDouble(RevenueItem::getAmount).sum();
 double growth = calculateGrowth(items);
 
-// Собираете модуль - никакого SQL в шаблоне
+// Собираете модуль — никакого SQL в шаблоне
 RevenueModule revenue = new RevenueModule(total, growth, items);
 ```
 
 Преимущества такого подхода:
 
-- **Читаемость** - структура данных описана полями Java-класса, не SQL-запросом в XML
-- **Контроль** - все вычисления, форматирование и бизнес-логика выполняются в Java до рендеринга
-- **Типобезопасность** - компилятор и IDE помогают избежать опечаток в именах полей
-- **Тестируемость** - модель отчёта - обычный POJO, легко тестируемый без рендеринга PDF
+- **Читаемость** — структура данных описана полями Java-класса, не SQL-запросом в XML
+- **Контроль** — все вычисления, форматирование и бизнес-логика выполняются в Java до рендеринга
+- **Типобезопасность** — компилятор и IDE помогают избежать опечаток в именах полей
+- **Тестируемость** — модель отчёта — обычный POJO, легко тестируемый без рендеринга PDF
 
 ---
 
@@ -291,7 +279,7 @@ RevenueModule revenue = new RevenueModule(total, growth, items);
     - Bands с субрепортами в секции `<detail>` для каждого поля-субрепорта
 4. Записывает обновлённый JRXML в `target/generated-sources`
 
-Существующие элементы определяются по имени и никогда не перезаписываются - пользовательский layout,
+Существующие элементы определяются по имени и никогда не перезаписываются — пользовательский layout,
 стили и выражения, созданные в Jaspersoft Studio, всегда сохраняются.
 
 ### В рантайме
@@ -323,7 +311,7 @@ RevenueModule revenue = new RevenueModule(total, growth, items);
 
 ## Работа с шаблонами JRXML
 
-### Новый отчёт - режим CREATE
+### Новый отчёт — режим CREATE
 
 Когда вы создаёте новый класс отчёта с `mode = GenerationMode.CREATE` и запускаете `mvn compile`, в
 папке `target/generated-sources` появляется готовый JRXML-файл. Он уже содержит всё необходимое:
@@ -336,23 +324,23 @@ RevenueModule revenue = new RevenueModule(total, growth, items);
 **Ваш workflow:**
 
 1. Открываете сгенерированный файл из `target/generated-sources` в Jaspersoft Studio
-2. Добавляете дизайн - размещаете элементы, настраиваете шрифты, цвета, заголовки
+2. Добавляете дизайн — размещаете элементы, настраиваете шрифты, цвета, заголовки
 3. Сохраняете готовый шаблон в `src/main/resources/reports/`
 
-Параметры, датасеты и субрепорты уже на месте - вам остаётся только дизайн.
+Параметры, датасеты и субрепорты уже на месте — вам остаётся только дизайн.
 
-### Существующий отчёт - режим INJECT (по умолчанию)
+### Существующий отчёт — режим INJECT (по умолчанию)
 
 Когда вы добавляете новое поле или новый субрепорт в уже существующий класс отчёта, процессор при
 следующей компиляции снова создаёт файл в `target/generated-sources`. Он содержит ваш оригинальный
-шаблон плюс только недостающие элементы - новые параметры, датасеты, субрепорты. Всё что уже было в
+шаблон плюс только недостающие элементы — новые параметры, датасеты, субрепорты. Всё что уже было в
 шаблоне остаётся нетронутым.
 
 **Ваш workflow:**
 
 1. Добавили поле в Java-класс
 2. Запустили `mvn compile`
-3. Открыли обновлённый файл из `target/generated-sources` в Jaspersoft Studio - новые параметры уже
+3. Открыли обновлённый файл из `target/generated-sources` в Jaspersoft Studio — новые параметры уже
    есть
 4. Разместили новые элементы в дизайне и вернули файл в `src/main/resources/reports/`
 
@@ -379,11 +367,11 @@ RevenueModule revenue = new RevenueModule(total, growth, items);
                    your_report.jrxml
                         |
                         v
-              Jaspersoft Studio - создай (для CREATE)
-                        |         дополни (для INJECT) дизайн отчета
+              Jaspersoft Studio — создай (CREATE) или дополни (INJECT) дизайн
+                        |
                         v
               src/main/resources/reports/
-                   your_report.jrxml  <- итоговый шаблон
+                   your_report.jrxml  ← итоговый шаблон
 ```
 
 ---
@@ -393,8 +381,8 @@ RevenueModule revenue = new RevenueModule(total, growth, items);
 | Режим                   | Поведение                                                                   |
 |-------------------------|-----------------------------------------------------------------------------|
 | `INJECT` (по умолчанию) | Вставляет недостающие элементы в JRXML не трогая остальное                  |
-| `CREATE`                | Создаёт новый JRXML из встроенного шаблона, перезаписывая существующий файл |
-| `NONE`                  | Генерация не выполняется - управляйте JRXML полностью вручную               |
+| `CREATE`                | Создаёт новый JRXML из пустого шаблона, перезаписывая существующий файл     |
+| `NONE`                  | Генерация не выполняется — управляйте JRXML полностью вручную               |
 
 ```java
 @JasperModularReport(
@@ -427,10 +415,10 @@ jasper:
 
 Помечает класс как корневой отчёт. Класс должен наследовать `ModularReport`.
 
-| Атрибут        | Тип               | Обязательно | Описание                                     |
-|----------------|-----------------  |-------------|----------------------------------------------|
-| `templatePath` | `String`          | Да          | Путь к JRXML-файлу в classpath               |
-| `mode`         | `GenerationMode`  | Нет         | Стратегия генерации (по умолчанию: `INJECT`) |
+| Атрибут        | Тип               | Обязательно | Описание                                       |
+|----------------|-------------------|-------------|------------------------------------------------|
+| `templatePath` | `String`          | Да          | Путь к JRXML-файлу в classpath                 |
+| `mode`         | `GenerationMode`  | Нет         | Стратегия генерации (по умолчанию: `INJECT`)   |
 | `orientation`  | `PageOrientation` | Нет         | Ориентация страницы (по умолчанию: `PORTRAIT`) |
 
 ### `@JasperSubreport`
@@ -438,7 +426,7 @@ jasper:
 Помечает класс как модуль субрепорта. Класс должен наследовать `SubreportModule`.
 
 | Атрибут        | Тип               | Обязательно | Описание                                                       |
-|----------------|-----------------  |-------------|----------------------------------------------------------------|
+|----------------|-------------------|-------------|----------------------------------------------------------------|
 | `templatePath` | `String`          | Да          | Путь к JRXML-файлу в classpath                                 |
 | `prefix`       | `String`          | Нет         | Префикс для имён параметров (по умолчанию: простое имя класса) |
 | `mode`         | `GenerationMode`  | Нет         | Стратегия генерации (по умолчанию: `INJECT`)                   |
@@ -448,9 +436,9 @@ jasper:
 
 Управляет типом JRXML-компонента для поля-коллекции.
 
-| Атрибут       | Тип                       | Обязательно | Описание                                           |
-|---------------|---------------------------|-------------|--------------------------------------------------  |
-| `type`        | `CollectionComponentType` | Нет         | `LIST` или `TABLE` (по умолчанию: `TABLE`)         |
+| Атрибут       | Тип                       | Обязательно | Описание                                               |
+|---------------|---------------------------|-------------|--------------------------------------------------------|
+| `type`        | `CollectionComponentType` | Нет         | `LIST` или `TABLE` (по умолчанию: `TABLE`)             |
 | `columnWidth` | `int`                     | Нет         | Ширина каждой колонки в пикселях (по умолчанию: `100`) |
 
 Если `@JasperCollection` отсутствует, процессор использует компонент `list` для обратной
@@ -476,17 +464,11 @@ private transient String internalState;
 
 ```
 jasper-modular-parent
-├── jasper-modular-core              - аннотации, контракты, базовые классы, рендерер
-├── jasper-modular-autoconfigure     - Spring Boot автоконфигурация и прекомпилятор
-├── jasper-modular-processor-jr7     - аннотационный процессор для JasperReports 7.x
-├── jasper-modular-processor-jr6     - аннотационный процессор для JasperReports 6.x и старше
-├── jasper-modular-starter-jr7       - единственная зависимость для JasperReports 7.x
-└── jasper-modular-starter-jr6       - единственная зависимость для JasperReports 6.x и старше
+├── jasper-modular-core              — аннотации, контракты, базовые классы, рендерер
+├── jasper-modular-autoconfigure     — Spring Boot автоконфигурация и прекомпилятор
+├── jasper-modular-processor         — аннотационный процессор (JasperReports 6.x и 7.x)
+└── jasper-modular-starter           — единственная зависимость для подключения
 ```
-
-Модули core, autoconfigure и renderer общие для обеих версий. Отличается только аннотационный
-процессор — JasperReports 6 требует явного указания `ComponentKey` для сериализации компонентов
-list и table, тогда как JasperReports 7 определяет namespace автоматически.
 
 ---
 
@@ -501,7 +483,7 @@ list и table, тогда как JasperReports 7 определяет namespace 
 <dependency>
     <groupId>net.sf.jasperreports</groupId>
     <artifactId>jasperreports-excel-poi</artifactId>
-    <version>7.0.6</version>
+    <version>${your.jasperreports.version}</version>
 </dependency>
 ```
 
@@ -512,7 +494,7 @@ list и table, тогда как JasperReports 7 определяет namespace 
 
 ## Лицензия
 
-Apache License 2.0 - см. [LICENSE](LICENSE).
+Apache License 2.0 — см. [LICENSE](LICENSE).
 
 ---
 
