@@ -94,11 +94,15 @@ final class JrxmlTemplateInjectorFixtures {
     }
 
     static List<JrxmlParameter> subreportParams() {
+        String prefix = "Items";
         return List.of(
                 new JrxmlParameter(SUBREPORT_REPORT_PARAM,
-                                   "net.sf.jasperreports.engine.JasperReport", null),
+                                   "net.sf.jasperreports.engine.JasperReport",
+                                   null,
+                                   prefix),
                 new JrxmlParameter(SUBREPORT_MAP_PARAM,
-                                   "java.util.Map", null)
+                                   "java.util.Map",
+                                   null)
         );
     }
 
@@ -123,9 +127,12 @@ final class JrxmlTemplateInjectorFixtures {
     static List<JrxmlParameter> existingSubreportParams() {
         return List.of(
                 new JrxmlParameter(EXISTING_SUBREPORT_PREFIX + "Report",
-                                   "net.sf.jasperreports.engine.JasperReport", null),
+                                   "net.sf.jasperreports.engine.JasperReport",
+                                   null,
+                                   EXISTING_SUBREPORT_PREFIX),
                 new JrxmlParameter(EXISTING_SUBREPORT_PREFIX + "MapParameter",
-                                   "java.util.Map", null)
+                                   "java.util.Map",
+                                   null)
         );
     }
 }
