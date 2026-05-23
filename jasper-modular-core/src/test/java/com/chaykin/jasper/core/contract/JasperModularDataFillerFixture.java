@@ -164,4 +164,49 @@ final class JasperModularDataFillerFixture {
 
     }
 
+    @JasperSubreport(templatePath = "/reports/currency_module.jrxml", prefix = "Currency")
+    static class CurrencyModule extends SubreportModule {
+
+        String currencyCode;
+
+        CurrencyModule(String currencyCode) {this.currencyCode = currencyCode;}
+
+        @Override
+        public boolean isEmpty() {return false;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/financial_module.jrxml", prefix = "Financial")
+    static class FinancialModule extends SubreportModule {
+
+        CurrencyModule currencyModule;
+
+        FinancialModule(CurrencyModule currency) {this.currencyModule = currency;}
+
+        @Override
+        public boolean isEmpty() {return false;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/summary_module.jrxml", prefix = "Summary")
+    static class SummaryModule extends SubreportModule {
+
+        CurrencyModule currencyModule;
+
+        SummaryModule(CurrencyModule currency) {this.currencyModule = currency;}
+
+        @Override
+        public boolean isEmpty() {return false;}
+    }
+
+    @JasperModularReport(templatePath = "/reports/company_report.jrxml")
+    static class CompanyReport extends ModularReport {
+
+        FinancialModule financialModule;
+        SummaryModule summaryModule;
+
+        CompanyReport(FinancialModule financial, SummaryModule summary) {
+            this.financialModule = financial;
+            this.summaryModule = summary;
+        }
+    }
+
 }

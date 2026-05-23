@@ -2,6 +2,9 @@ package com.chaykin.jasper.core.contract;
 
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ChildReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.CollectionReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.CompanyReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.CurrencyModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.FinancialModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.IgnoredFieldReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ItemsModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.LineItem;
@@ -14,6 +17,7 @@ import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.OtherModu
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ScalarReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SummaryModule;
 import com.chaykin.jasper.core.exception.JasperModularException;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
 import org.junit.jupiter.api.DisplayName;
@@ -250,6 +254,58 @@ class JasperModularDataFillerTest {
         assertThat(params)
                 .doesNotContainKey("ItemsReport")
                 .doesNotContainKey("ItemsMapParameter");
+    }
+
+    @Nested
+    @DisplayName("shared subreport reachable via two branches")
+    class SharedSubreportHandling {
+
+        @Test
+        @DisplayName("shared subreport reachable via two branches does not throw")
+        void sharedSubreport_reachableViaTwoBranches_doesNotThrow() {
+            // given
+            var currency = new CurrencyModule("USD");
+            var report = new CompanyReport(
+                    new FinancialModule(currency),
+                    new SummaryModule(currency)
+            );
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            assertThat(params)
+                    .containsKey("FinancialReport")
+                    .containsKey("FinancialMapParameter")
+                    .containsKey("SummaryReport")
+                    .containsKey("SummaryMapParameter");
+        }
+
+        @Test
+        @DisplayName("each branch's MapParameter independently contains the shared subreport's params")
+        void sharedSubreport_eachBranchHasItsOwnParams() {
+            // given
+            var currency = new CurrencyModule("EUR");
+            var report = new CompanyReport(
+                    new FinancialModule(currency),
+                    new SummaryModule(currency)
+            );
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            @SuppressWarnings("unchecked")
+            Map<String, Object> financialParams =
+                    (Map<String, Object>) params.get("FinancialMapParameter");
+            assertThat(financialParams).containsKey("CurrencyReport");
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> summaryParams =
+                    (Map<String, Object>) params.get("SummaryMapParameter");
+            assertThat(summaryParams).containsKey("CurrencyReport");
+        }
+
     }
 
 }
