@@ -45,10 +45,8 @@ Jaspersoft Studio, the parameters are already there. You just use your data.
 
 ## The problem this solves
 
-Working with JasperReports is painful overall — handling data and passing it correctly into
-templates is difficult at every level. Modularity through subreports is the best way to bring order
-to this, but there is no standard mechanism for working with them conveniently. Every project solves
-it differently, and almost every approach carries its own set of problems:
+Every project tames subreports differently, and almost every approach carries its own set of
+problems:
 
 **One giant JSON for everything** — data is serialized into a single massive JSON object and passed
 to all subreports via `JsonDataSource`. Subreports extract the data they need using JSON paths
@@ -96,7 +94,7 @@ Add the starter — it pulls in everything except JasperReports itself, which yo
 <dependency>
     <groupId>io.github.hhdevr</groupId>
     <artifactId>jasper-modular-starter</artifactId>
-    <version>2.0.0</version>
+    <version>2.0.1</version>
 </dependency>
 
 <dependency>
@@ -118,7 +116,7 @@ JasperReports version alongside it so the processor can use the correct API at c
             <path>
                 <groupId>io.github.hhdevr</groupId>
                 <artifactId>jasper-modular-processor</artifactId>
-                <version>2.0.0</version>
+                <version>2.0.1</version>
             </path>
             <path>
                 <groupId>net.sf.jasperreports</groupId>
@@ -156,7 +154,7 @@ public class ItemsModule extends SubreportModule {
     private BigDecimal subtotal;
 
     @Override
-    public boolean isEmpty() { return items == null || items.isEmpty(); }
+    public boolean isEmpty() {return items == null || items.isEmpty();}
 }
 ```
 
@@ -186,7 +184,7 @@ report.setInvoiceNumber("INV-001");
 report.setTotal(BigDecimal.valueOf(1500.00));
 report.setItemsModule(items);
 
-JasperPrint print = new JasperModularRenderer<>().render(report);
+JasperPrint print = new JasperModularRenderer().render(report);
 ```
 
 ### 4. Export to PDF
@@ -289,8 +287,11 @@ When `render(module)` is called:
 2. All fields are traversed via reflection to build the `Map<String, Object>` parameters map
 3. Subreport fields are recursively compiled and filled, injecting `<prefix>Report` and
    `<prefix>MapParameter`
-4. Collection fields are wrapped in `JRBeanCollectionDataSource`
-5. `JasperFillManager.fillReport()` is called with the parameters map and an empty data source
+4. Collection fields are stored in the parameters map as `JRBeanCollectionDataSource` values —
+   they are **parameters**, not the root data source. In JRXML, reference them via
+   `$P{fieldName}` in the `<dataSourceExpression>` of a `list` or `table` component
+5. `JasperFillManager.fillReport()` is called with the parameters map and `JREmptyDataSource`
+   as the root data source — the library never uses band-iteration data sources
 6. The resulting `JasperPrint` is returned for export to any format
 
 Circular subreport dependencies (e.g. `A -> B -> A`) are detected automatically and throw a
@@ -378,11 +379,11 @@ template is left untouched.
 
 ## Generation modes
 
-| Mode               | Behavior                                                                            |
-|--------------------|-------------------------------------------------------------------------------------|
-| `INJECT` (default) | Injects missing elements into the existing JRXML without touching existing content  |
-| `CREATE`           | Creates a new JRXML from a blank design, overwriting any existing file              |
-| `NONE`             | No processing — manage the JRXML entirely by hand                                   |
+| Mode               | Behavior                                                                           |
+|--------------------|------------------------------------------------------------------------------------|
+| `INJECT` (default) | Injects missing elements into the existing JRXML without touching existing content |
+| `CREATE`           | Creates a new JRXML from a blank design, overwriting any existing file             |
+| `NONE`             | No processing — manage the JRXML entirely by hand                                  |
 
 ```java
 @JasperModularReport(

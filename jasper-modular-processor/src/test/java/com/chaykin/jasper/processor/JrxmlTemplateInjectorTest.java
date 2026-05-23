@@ -273,10 +273,10 @@ class JrxmlTemplateInjectorTest {
 
             messager.reset();
 
-            // when - inject again into the already-updated template
+            // when
             inject(new ByteArrayInputStream(firstResult), params);
 
-            // then - second injection should skip, not inject again
+            // then
             assertThat(messager.hasNote("List component already exists - skipping: "
                                         + COLLECTION_PARAM_NAME)).isTrue();
             assertThat(messager.hasNote("Injected list component: "
@@ -325,10 +325,10 @@ class JrxmlTemplateInjectorTest {
 
             messager.reset();
 
-            // when - inject again into the already-updated template
+            // when
             inject(new ByteArrayInputStream(firstResult), params);
 
-            // then - second injection should skip, not inject again
+            // then
             assertThat(messager.hasNote("List component already exists - skipping: "
                                         + TABLE_PARAM_NAME)).isTrue();
             assertThat(messager.hasNote("Injected table component: "
@@ -401,8 +401,7 @@ class JrxmlTemplateInjectorTest {
                                              .size();
 
             // when
-            byte[] secondResult = injectToBytes(
-                    new ByteArrayInputStream(firstResult), params);
+            byte[] secondResult = injectToBytes(new ByteArrayInputStream(firstResult), params);
             int countAfterSecond = JRXmlLoader.load(new ByteArrayInputStream(secondResult))
                                               .getParametersList()
                                               .size();

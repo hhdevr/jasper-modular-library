@@ -8,7 +8,6 @@ import net.sf.jasperreports.components.list.StandardListComponent;
 import net.sf.jasperreports.components.table.DesignCell;
 import net.sf.jasperreports.components.table.StandardColumn;
 import net.sf.jasperreports.components.table.StandardTable;
-import net.sf.jasperreports.engine.JRBand;
 import net.sf.jasperreports.engine.JRException;
 import net.sf.jasperreports.engine.design.JRDesignBand;
 import net.sf.jasperreports.engine.design.JRDesignComponentElement;
@@ -23,6 +22,7 @@ import net.sf.jasperreports.engine.design.JRDesignSubreport;
 import net.sf.jasperreports.engine.design.JRDesignTextField;
 import net.sf.jasperreports.engine.design.JasperDesign;
 import net.sf.jasperreports.engine.type.PositionTypeEnum;
+import net.sf.jasperreports.engine.type.SplitTypeEnum;
 import net.sf.jasperreports.engine.xml.JRXmlWriter;
 
 import javax.annotation.processing.Messager;
@@ -45,15 +45,16 @@ import java.util.List;
  * <ol>
  *   <li>Datasets — {@code <dataset>} elements for each collection field</li>
  *   <li>Parameters — {@code <parameter>} elements for all fields</li>
- *   <li>Collection components — {@code list} or {@code table} component in the detail
- *       section for each collection field with a dataset</li>
+ *   <li>Collection components — each collection field gets its own {@code <band>} containing
+ *       a {@code list} or {@code table} component in the detail section</li>
  *   <li>Subreport bands — {@code <band>} elements containing a subreport element for
  *       each subreport field</li>
  * </ol>
  *
- * <p>All injections are idempotent: existing elements are detected by name and skipped,
- * so re-running the processor after adding new fields only adds the genuinely new
- * elements without disturbing user-defined design.</p>
+ * <p>All injections are idempotent: existing elements are detected by name (datasets,
+ * parameters) or by exact expression text (subreport bands) and skipped, so re-running
+ * the processor after adding new fields only adds the genuinely new elements without
+ * disturbing user-defined design.</p>
  *
  * <h2>JasperReports 6.x compatibility</h2>
  * <p>In JR6, {@code JRXmlWriter} requires a {@code ComponentKey} to be set on every
@@ -71,8 +72,6 @@ public class JrxmlTemplateInjector {
     private static final int HEADER_HEIGHT = 20;
 
     private static final int SUBREPORT_HEIGHT = 100;
-
-    private static final int SUBREPORT_WIDTH = 555;
 
     private final Messager messager;
 
@@ -160,7 +159,9 @@ public class JrxmlTemplateInjector {
                 continue;
             }
 
-            JRDesignBand band = getOrCreateLastBand(detailSection);
+            JRDesignBand band = new JRDesignBand();
+            band.setHeight(LIST_HEIGHT);
+            band.setSplitType(SplitTypeEnum.STRETCH);
 
             if (field.dataset().componentType() == CollectionComponentType.TABLE) {
                 band.addElement(createTableComponent(field));
@@ -171,6 +172,8 @@ public class JrxmlTemplateInjector {
                 messager.printMessage(Diagnostic.Kind.NOTE,
                                       "Injected list component: " + field.name());
             }
+
+            detailSection.addBand(band);
         }
     }
 
@@ -190,17 +193,6 @@ public class JrxmlTemplateInjector {
                          }
                          return false;
                      });
-    }
-
-    private JRDesignBand getOrCreateLastBand(JRDesignSection section) throws JRException {
-        JRBand[] bands = section.getBands();
-        if (bands.length > 0) {
-            return (JRDesignBand) bands[bands.length - 1];
-        }
-        JRDesignBand band = new JRDesignBand();
-        band.setHeight(LIST_HEIGHT);
-        section.addBand(band);
-        return band;
     }
 
     private JRDesignComponentElement createListComponent(JrxmlParameter field) {
@@ -304,10 +296,10 @@ public class JrxmlTemplateInjector {
 
     private void injectSubreportBands(JasperDesign design, List<JrxmlParameter> fields)
             throws JRException {
+
         List<String> subreportPrefixes = fields.stream()
-                                               .filter(f -> "net.sf.jasperreports.engine.JasperReport"
-                                                       .equals(f.jrxmlClass()))
-                                               .map(f -> f.name().replace("Report", ""))
+                                               .filter(f -> f.subreportPrefix() != null)
+                                               .map(JrxmlParameter::subreportPrefix)
                                                .toList();
 
         if (subreportPrefixes.isEmpty()) {
@@ -315,6 +307,7 @@ public class JrxmlTemplateInjector {
         }
 
         JRDesignSection detailSection = (JRDesignSection) design.getDetailSection();
+        int columnWidth = design.getColumnWidth();
 
         for (String prefix: subreportPrefixes) {
             if (subreportBandExists(detailSection, prefix)) {
@@ -322,30 +315,31 @@ public class JrxmlTemplateInjector {
                                       "Subreport band already exists - skipping: " + prefix);
                 continue;
             }
-            detailSection.addBand(createSubreportBand(prefix));
+            detailSection.addBand(createSubreportBand(prefix, columnWidth));
             messager.printMessage(Diagnostic.Kind.NOTE,
                                   "Injected subreport band: " + prefix);
         }
     }
 
     private boolean subreportBandExists(JRDesignSection section, String prefix) {
+        String expectedExpr = "$P{" + prefix + "Report}";
         return Arrays.stream(section.getBands())
                      .flatMap(b -> Arrays.stream(b.getElements()))
                      .filter(e -> e instanceof JRDesignSubreport)
                      .map(e -> (JRDesignSubreport) e)
                      .anyMatch(sr -> sr.getExpression() != null
-                                     && sr.getExpression().getText().contains(prefix + "Report"));
+                                     && expectedExpr.equals(sr.getExpression().getText()));
     }
 
-    private JRDesignBand createSubreportBand(String prefix) {
+    private JRDesignBand createSubreportBand(String prefix, int columnWidth) {
         JRDesignBand band = new JRDesignBand();
         band.setHeight(SUBREPORT_HEIGHT);
-        band.setSplitType(net.sf.jasperreports.engine.type.SplitTypeEnum.STRETCH);
+        band.setSplitType(SplitTypeEnum.STRETCH);
 
         JRDesignSubreport subreport = new JRDesignSubreport(null);
         subreport.setX(0);
         subreport.setY(0);
-        subreport.setWidth(SUBREPORT_WIDTH);
+        subreport.setWidth(columnWidth);
         subreport.setHeight(SUBREPORT_HEIGHT);
         subreport.setPositionType(PositionTypeEnum.FLOAT);
         subreport.setRemoveLineWhenBlank(true);
@@ -366,12 +360,6 @@ public class JrxmlTemplateInjector {
         return band;
     }
 
-    /**
-     * Sets {@code ComponentKey} on the element via reflection when running under
-     * JasperReports 6.x. In JR6 {@code JRXmlWriter} requires an explicit
-     * {@code ComponentKey} to resolve the XML namespace for list/table components;
-     * in JR7 the class was removed and the namespace is inferred automatically.
-     */
     private void applyComponentKeyIfNeeded(JRDesignComponentElement element,
                                            String componentName) {
         try {
@@ -386,7 +374,7 @@ public class JrxmlTemplateInjector {
             Method setter = element.getClass().getMethod("setComponentKey", keyClass);
             setter.invoke(element, key);
         } catch (ClassNotFoundException ignored) {
-            // JR7: ComponentKey removed, namespace inferred automatically
+            // JR7: ComponentKey removed, namespace inferred automatically — expected path.
         } catch (ReflectiveOperationException e) {
             messager.printMessage(Diagnostic.Kind.WARNING,
                                   "Could not set ComponentKey for " + componentName

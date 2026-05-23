@@ -27,7 +27,7 @@ import java.util.Map;
  *
  * <h2>PDF export example</h2>
  * <pre>{@code
- * JasperPrint print = new JasperModularRenderer<>().render(myReport);
+ * JasperPrint print = new JasperModularRenderer().render(myReport);
  *
  * ByteArrayOutputStream out = new ByteArrayOutputStream();
  * JRPdfExporter exporter = new JRPdfExporter();
@@ -38,32 +38,28 @@ import java.util.Map;
  * byte[] pdf = out.toByteArray();
  * }</pre>
  *
- * @param <T> the concrete report type, must extend {@link ModularReport}
  * @see ModularReport
  * @see JasperPrint
  */
-public class JasperModularRenderer<T extends ModularReport> {
-
-    /**
-     * Creates a new {@code JasperModularRenderer} instance.
-     */
-    public JasperModularRenderer() {
-    }
+public class JasperModularRenderer {
 
     /**
      * Compiles the report template and fills it with data from the given module.
      *
-     * <p>The data source passed to JasperReports is always {@link JREmptyDataSource},
-     * since all data is provided through the parameters map built by
-     * {@link ModularReport#fillMapParameters()}. This includes both scalar values and
-     * collection-based data sources for list components.</p>
+     * <p>The root data source argument to {@code JasperFillManager.fillReport()} is always
+     * {@link JREmptyDataSource} — the library does not use the band-iteration data source.
+     * All data travels through the parameters map built by
+     * {@link ModularReport#fillMapParameters()}: scalar fields as plain values, collections
+     * as {@code JRBeanCollectionDataSource} <em>parameters</em> (accessible in JRXML via
+     * {@code $P{fieldName}} in a list or table {@code <dataSourceExpression>}), and
+     * subreport modules as compiled template + nested parameters map pairs.</p>
      *
      * @param module the populated report module to render
      * @return a filled {@link JasperPrint} ready for export to any supported format
      * @throws JasperModularException if template compilation fails, the JRXML is not found,
      *                                or report filling encounters an error
      */
-    public JasperPrint render(T module) throws JasperModularException {
+    public JasperPrint render(ModularReport module) throws JasperModularException {
         try {
             JasperReport jasperReport = module.compileReport();
             Map<String, Object> parameters = module.fillMapParameters();

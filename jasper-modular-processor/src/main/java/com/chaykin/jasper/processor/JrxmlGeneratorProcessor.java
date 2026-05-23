@@ -30,6 +30,7 @@ import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.WildcardType;
 import javax.lang.model.util.ElementFilter;
@@ -41,50 +42,22 @@ import javax.tools.StandardLocation;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Annotation processor that generates and updates JRXML report templates at compile time.
  *
- * <p>This processor is triggered by the {@link JasperModularReport} and
- * {@link JasperSubreport} annotations. For each annotated class it inspects the declared
- * fields, builds a model of parameters, datasets and subreport references, and either
- * creates a new JRXML file from a blank template or injects missing elements into an
- * existing one - depending on the {@link GenerationMode} specified on the annotation.</p>
+ * <p>Triggered by {@link JasperModularReport} and {@link JasperSubreport}. Inspects
+ * declared fields and either creates a new JRXML or injects missing elements into an
+ * existing one, depending on {@link GenerationMode}.</p>
  *
- * <h2>Generation modes</h2>
- * <ul>
- *   <li>{@link GenerationMode#CREATE} - generates a new JRXML from a blank programmatically
- *       created design, pre-populated with all parameters, datasets, list/table components and
- *       subreport bands derived from the class fields.</li>
- *   <li>{@link GenerationMode#INJECT} - reads the existing JRXML and injects only the
- *       elements that are not already present, preserving all user-defined layout.</li>
- *   <li>{@link GenerationMode#NONE} - skips generation entirely for this class.</li>
- * </ul>
- *
- * <h2>Collection component type</h2>
- * <p>Collection fields can be annotated with {@link JasperCollection} to control whether
- * a {@code list} or {@code table} component is generated, and to set the column width.
- * When the annotation is present, the default component type is {@code table}.
- * Without the annotation, a {@code list} component with
- * {@link JasperCollection#DEFAULT_COLUMN_WIDTH} is used for backwards compatibility.</p>
- * <pre>{@code
- * @JasperCollection(type = CollectionComponentType.TABLE, columnWidth = 100)
- * private List<LineItem> items;
- * }</pre>
- *
- * <h2>Page orientation</h2>
- * <p>The blank template orientation is controlled per class via
- * {@link JasperModularReport#orientation()} or {@link JasperSubreport#orientation()}.
- * No compiler options are needed.</p>
- * <pre>{@code
- * @JasperModularReport(templatePath = "/reports/wide.jrxml", orientation = PageOrientation.LANDSCAPE)
- * }</pre>
- *
- * <h2>Output location</h2>
- * <p>Generated JRXML files are written to {@code StandardLocation.SOURCE_OUTPUT},
- * which corresponds to {@code target/generated-sources} in a standard Maven build.</p>
+ * <p>Subreport fields must be declared with the concrete {@link JasperSubreport}-annotated
+ * type, not a base type — the processor resolves the annotation from the declared type.</p>
  */
 @SupportedAnnotationTypes({
         "com.chaykin.jasper.core.annotation.JasperModularReport",
@@ -94,6 +67,25 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
     private static final String JR_BEAN_COLLECTION_DS =
             "net.sf.jasperreports.engine.data.JRBeanCollectionDataSource";
+
+    private static final Set<String> SIMPLE_TYPES = Set.of(
+            "java.lang.String",
+            "java.lang.Integer",
+            "java.lang.Long",
+            "java.lang.Double",
+            "java.lang.Float",
+            "java.lang.Boolean",
+            "java.lang.Short",
+            "java.lang.Byte",
+            "java.lang.Character",
+            "java.lang.Number",
+            "java.math.BigDecimal",
+            "java.math.BigInteger",
+            "java.util.UUID",
+            "java.util.Locale",
+            "java.util.Currency",
+            "java.net.URI",
+            "java.net.URL");
 
     private Filer filer;
 
@@ -142,8 +134,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             } catch (Exception e) {
                 messager.printMessage(Diagnostic.Kind.ERROR,
                                       "Failed to generate JRXML for "
-                                      + classElement.getSimpleName() + ": " + e.getMessage()
-                                      + "\n" + java.util.Arrays.toString(e.getStackTrace()),
+                                      + classElement.getSimpleName() + ": " + e,
                                       classElement);
             }
         }
@@ -253,20 +244,31 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
     private List<JrxmlParameter> describeFields(TypeElement classElement) {
         List<JrxmlParameter> result = new ArrayList<>();
-        TypeElement current = classElement;
+        forEachField(classElement,
+                     this::isJasperModularDataFiller,
+                     f -> describeField(f, result));
+        return result;
+    }
 
-        while (current != null && !isJasperModularDataFiller(current)) {
+    /**
+     * Walks the class hierarchy from {@code start} upward, applying {@code action} to every
+     * non-{@link JasperIgnore} field, until {@code stopAt} matches or the hierarchy ends.
+     */
+    private void forEachField(TypeElement start,
+                              Predicate<TypeElement> stopAt,
+                              Consumer<VariableElement> action) {
+        TypeElement current = start;
+        while (current != null && !stopAt.test(current)) {
             ElementFilter.fieldsIn(current.getEnclosedElements())
                          .stream()
                          .filter(f -> f.getAnnotation(JasperIgnore.class) == null)
-                         .forEach(f -> describeField(f, result));
+                         .forEach(action);
 
             TypeMirror superclass = current.getSuperclass();
             current = superclass != null
                       ? (TypeElement) typeUtils.asElement(superclass)
                       : null;
         }
-        return result;
     }
 
     private void describeField(VariableElement field, List<JrxmlParameter> result) {
@@ -283,7 +285,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         }
 
         result.add(new JrxmlParameter(field.getSimpleName().toString(),
-                                      field.asType().toString(),
+                                      resolveJrxmlClass(field.asType()),
                                       null));
     }
 
@@ -299,7 +301,8 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         return List.of(
                 new JrxmlParameter(prefix + "Report",
                                    "net.sf.jasperreports.engine.JasperReport",
-                                   null),
+                                   null,
+                                   prefix),
                 new JrxmlParameter(prefix + "MapParameter",
                                    "java.util.Map",
                                    null)
@@ -345,16 +348,18 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                                          TypeElement elementClass,
                                          CollectionComponentType componentType,
                                          int columnWidth) {
-        List<JrxmlDatasetField> fields =
-                ElementFilter.fieldsIn(elementClass.getEnclosedElements())
-                             .stream()
-                             .filter(f -> f.getAnnotation(JasperIgnore.class) == null)
-                             .map(f -> new JrxmlDatasetField(
-                                     f.getSimpleName().toString(),
-                                     f.asType().toString()))
-                             .toList();
+        Map<String, JrxmlDatasetField> fields = new LinkedHashMap<>();
+        forEachField(elementClass,
+                     t -> t.getQualifiedName().contentEquals("java.lang.Object"),
+                     f -> fields.putIfAbsent(
+                             f.getSimpleName().toString(),
+                             new JrxmlDatasetField(f.getSimpleName().toString(),
+                                                   resolveJrxmlClass(f.asType()))));
 
-        return new JrxmlDataset(name, fields, componentType, columnWidth);
+        return new JrxmlDataset(name,
+                                List.copyOf(fields.values()),
+                                componentType,
+                                columnWidth);
     }
 
     private GenerationMode resolveMode(TypeElement classElement) {
@@ -406,19 +411,11 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     }
 
     private boolean isSimpleType(TypeElement element) {
+        if (element.getKind() == ElementKind.ENUM) {
+            return true;
+        }
         String name = element.getQualifiedName().toString();
-        return name.equals("java.lang.String")
-               || name.equals("java.lang.Integer")
-               || name.equals("java.lang.Long")
-               || name.equals("java.lang.Double")
-               || name.equals("java.lang.Float")
-               || name.equals("java.lang.Boolean")
-               || name.equals("java.lang.Short")
-               || name.equals("java.lang.Byte")
-               || name.equals("java.lang.Character")
-               || name.equals("java.math.BigDecimal")
-               || name.equals("java.math.BigInteger")
-               || name.startsWith("java.time.");
+        return SIMPLE_TYPES.contains(name) || name.startsWith("java.time.");
     }
 
     private boolean isJasperModularDataFiller(TypeElement element) {
@@ -445,7 +442,20 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                : arg;
     }
 
+    /**
+     * Erases generic type arguments and boxes primitives for use as a JRXML {@code class} attribute.
+     */
+    private String resolveJrxmlClass(TypeMirror typeMirror) {
+        if (typeMirror.getKind().isPrimitive()) {
+            return typeUtils.boxedClass((PrimitiveType) typeMirror)
+                            .getQualifiedName()
+                            .toString();
+        }
+        return typeUtils.erasure(typeMirror).toString();
+    }
+
     private String toSnakeCase(String name) {
-        return name.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
+        return name.replaceAll("([a-z])([A-Z])", "$1_$2")
+                   .toLowerCase();
     }
 }
