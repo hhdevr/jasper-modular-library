@@ -94,7 +94,7 @@ JRXML корневого отчёта, JRXML субрепорта — расси
 <dependency>
     <groupId>io.github.hhdevr</groupId>
     <artifactId>jasper-modular-starter</artifactId>
-    <version>2.0.0</version>
+    <version>2.0.1</version>
 </dependency>
 
 <dependency>
@@ -116,7 +116,7 @@ JRXML корневого отчёта, JRXML субрепорта — расси
             <path>
                 <groupId>io.github.hhdevr</groupId>
                 <artifactId>jasper-modular-processor</artifactId>
-                <version>2.0.0</version>
+                <version>2.0.1</version>
             </path>
             <path>
                 <groupId>net.sf.jasperreports</groupId>
