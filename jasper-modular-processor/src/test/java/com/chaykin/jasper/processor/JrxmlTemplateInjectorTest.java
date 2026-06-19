@@ -28,6 +28,9 @@ import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.EXISTIN
 import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.EXISTING_SUBREPORT_PREFIX;
 import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.SCALAR_PARAM_CLASS;
 import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.SCALAR_PARAM_NAME;
+import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.SUBREPORT_LIST_DATASET;
+import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.SUBREPORT_LIST_DS_PARAM;
+import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.SUBREPORT_LIST_PREFIX;
 import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.TABLE_PARAM_NAME;
 import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.collectionParam;
 import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.collectionParamWithCustomWidth;
@@ -35,6 +38,7 @@ import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.existin
 import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.existingScalarParam;
 import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.existingSubreportParams;
 import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.scalarParam;
+import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.subreportListParams;
 import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.subreportParams;
 import static com.chaykin.jasper.processor.JrxmlTemplateInjectorFixtures.tableParam;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -432,6 +436,89 @@ class JrxmlTemplateInjectorTest {
 
             // then
             assertThat(countAfterSecond).isEqualTo(countAfterFirst);
+        }
+    }
+
+    @Nested
+    @DisplayName("subreport lists")
+    class SubreportLists {
+
+        @Test
+        @DisplayName("subreport list component is injected for a List<Module> parameter")
+        void subreportList_isInjected() throws Exception {
+            // given
+            var params = subreportListParams();
+
+            // when
+            inject(blankTemplate(), params);
+
+            // then
+            assertThat(messager.hasNote("Injected subreport list: " + SUBREPORT_LIST_PREFIX))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("a single DataSource parameter is added")
+        void subreportList_addsParameters() throws Exception {
+            // given
+            var params = subreportListParams();
+
+            // when
+            JasperDesign design = inject(blankTemplate(), params);
+
+            // then
+            assertThat(design.getParametersMap()).containsKey(SUBREPORT_LIST_DS_PARAM);
+        }
+
+        @Test
+        @DisplayName("dataset with the params field is added")
+        void subreportList_addsDataset() throws Exception {
+            // given
+            var params = subreportListParams();
+
+            // when
+            JasperDesign design = inject(blankTemplate(), params);
+
+            // then
+            assertThat(design.getDatasetMap()).containsKey(SUBREPORT_LIST_DATASET);
+            JRField[] fields = design.getDatasetMap()
+                                     .get(SUBREPORT_LIST_DATASET)
+                                     .getFields();
+            assertThat(Arrays.stream(fields)).anyMatch(f -> "params".equals(f.getName()));
+        }
+
+        @Test
+        @DisplayName("generated XML wires the repeating subreport to report, data source and params map")
+        void subreportList_wiresSubreport() throws Exception {
+            // given
+            var params = subreportListParams();
+
+            // when
+            byte[] xml = injectToBytes(blankTemplate(), params);
+            String content = new String(xml, java.nio.charset.StandardCharsets.UTF_8);
+
+            // then - report and params both ride as sub-dataset fields (no main-report param crossing)
+            assertThat(content)
+                    .contains("$P{" + SUBREPORT_LIST_DS_PARAM + "}")
+                    .contains("$F{params}")
+                    .contains("$F{report}");
+        }
+
+        @Test
+        @DisplayName("subreport list is not duplicated on re-injection")
+        void existingSubreportList_isNotDuplicated() throws Exception {
+            // given
+            var params = subreportListParams();
+            byte[] first = injectToBytes(blankTemplate(), params);
+
+            messager.reset();
+
+            // when
+            inject(new ByteArrayInputStream(first), params);
+
+            // then
+            assertThat(messager.hasNote("Subreport list already exists - skipping: "
+                                        + SUBREPORT_LIST_DS_PARAM)).isTrue();
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.chaykin.jasper.processor;
 
 import com.chaykin.jasper.core.annotation.CollectionComponentType;
+import com.chaykin.jasper.core.contract.JasperModularDataFiller;
 import com.chaykin.jasper.processor.model.JrxmlDatasetField;
 import com.chaykin.jasper.processor.model.JrxmlParameter;
 import net.sf.jasperreports.components.list.DesignListContents;
@@ -34,34 +35,8 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Injects missing elements derived from annotated class fields into a {@link JasperDesign}
- * and writes the result to an output stream.
- *
- * <p>This class is used exclusively by {@link JrxmlGeneratorProcessor} at compile time.
- * It uses the JasperReports native {@link JasperDesign} API rather than raw XML
- * manipulation, which ensures correct element ordering and valid JRXML output.</p>
- *
- * <h2>Injection order</h2>
- * <ol>
- *   <li>Datasets — {@code <dataset>} elements for each collection field</li>
- *   <li>Parameters — {@code <parameter>} elements for all fields</li>
- *   <li>Collection components — each collection field gets its own {@code <band>} containing
- *       a {@code list} or {@code table} component in the detail section</li>
- *   <li>Subreport bands — {@code <band>} elements containing a subreport element for
- *       each subreport field</li>
- * </ol>
- *
- * <p>All injections are idempotent: existing elements are detected by name (datasets,
- * parameters) or by exact expression text (subreport bands) and skipped, so re-running
- * the processor after adding new fields only adds the genuinely new elements without
- * disturbing user-defined design.</p>
- *
- * <h2>JasperReports 6.x compatibility</h2>
- * <p>In JR6, {@code JRXmlWriter} requires a {@code ComponentKey} to be set on every
- * list/table component element in order to resolve the XML namespace during serialization.
- * In JR7 the {@code ComponentKey} class was removed. This class detects the presence of
- * {@code ComponentKey} at runtime via reflection and applies it when available, so the
- * same compiled jar works with both JR6 and JR7.</p>
+ * Idempotently injects missing elements derived from annotated class fields into a
+ * {@link JasperDesign} and writes the result to an output stream.
  */
 public class JrxmlTemplateInjector {
 
@@ -82,9 +57,6 @@ public class JrxmlTemplateInjector {
     /**
      * Injects all missing elements into the design and writes the result.
      *
-     * @param design the report design to inject into
-     * @param fields the list of field descriptors derived from the annotated class
-     * @param output the output stream to write the updated JRXML to
      * @throws Exception if injection or serialization fails
      */
     public void inject(JasperDesign design,
@@ -93,6 +65,7 @@ public class JrxmlTemplateInjector {
         injectDatasets(design, fields);
         injectParameters(design, fields);
         injectCollectionComponents(design, fields);
+        injectSubreportListComponents(design, fields);
         injectSubreportBands(design, fields);
 
         JRXmlWriter.writeReport(design, output, "UTF-8");
@@ -140,10 +113,10 @@ public class JrxmlTemplateInjector {
         }
     }
 
-    private void injectCollectionComponents(JasperDesign design, List<JrxmlParameter> fields)
-            throws JRException {
+    private void injectCollectionComponents(JasperDesign design, List<JrxmlParameter> fields) {
         List<JrxmlParameter> collectionFields = fields.stream()
-                                                      .filter(f -> f.dataset() != null)
+                                                      .filter(f -> f.dataset() != null
+                                                                   && f.subreportPrefix() == null)
                                                       .toList();
         if (collectionFields.isEmpty()) {
             return;
@@ -294,11 +267,11 @@ public class JrxmlTemplateInjector {
         return datasetRun;
     }
 
-    private void injectSubreportBands(JasperDesign design, List<JrxmlParameter> fields)
-            throws JRException {
+    private void injectSubreportBands(JasperDesign design, List<JrxmlParameter> fields) {
 
         List<String> subreportPrefixes = fields.stream()
-                                               .filter(f -> f.subreportPrefix() != null)
+                                               .filter(f -> f.subreportPrefix() != null
+                                                            && f.dataset() == null)
                                                .map(JrxmlParameter::subreportPrefix)
                                                .toList();
 
@@ -360,6 +333,82 @@ public class JrxmlTemplateInjector {
         return band;
     }
 
+    private void injectSubreportListComponents(JasperDesign design, List<JrxmlParameter> fields) {
+        List<JrxmlParameter> listFields = fields.stream()
+                                                .filter(f -> f.dataset() != null
+                                                             && f.subreportPrefix() != null)
+                                                .toList();
+        if (listFields.isEmpty()) {
+            return;
+        }
+
+        JRDesignSection detailSection = (JRDesignSection) design.getDetailSection();
+        int columnWidth = design.getColumnWidth();
+
+        for (JrxmlParameter field: listFields) {
+            if (collectionComponentExists(detailSection, field.dataset().name())) {
+                messager.printMessage(Diagnostic.Kind.NOTE,
+                                      "Subreport list already exists - skipping: " + field.name());
+                continue;
+            }
+
+            JRDesignBand band = new JRDesignBand();
+            band.setHeight(SUBREPORT_HEIGHT);
+            band.setSplitType(SplitTypeEnum.STRETCH);
+            band.addElement(createSubreportListComponent(field, columnWidth));
+            detailSection.addBand(band);
+
+            messager.printMessage(Diagnostic.Kind.NOTE,
+                                  "Injected subreport list: " + field.subreportPrefix());
+        }
+    }
+
+    private JRDesignComponentElement createSubreportListComponent(JrxmlParameter field, int width) {
+        JRDesignDatasetRun datasetRun = new JRDesignDatasetRun();
+        datasetRun.setDatasetName(field.dataset().name());
+        JRDesignExpression dsExpr = new JRDesignExpression();
+        dsExpr.setText("$P{" + field.name() + "}");
+        datasetRun.setDataSourceExpression(dsExpr);
+
+        JRDesignSubreport subreport = new JRDesignSubreport(null);
+        subreport.setX(0);
+        subreport.setY(0);
+        subreport.setWidth(width);
+        subreport.setHeight(SUBREPORT_HEIGHT);
+        subreport.setPositionType(PositionTypeEnum.FLOAT);
+        subreport.setRemoveLineWhenBlank(true);
+
+        JRDesignExpression paramsExpr = new JRDesignExpression();
+        paramsExpr.setText("$F{" + JasperModularDataFiller.SUBREPORT_PARAMS_FIELD + "}");
+        subreport.setParametersMapExpression(paramsExpr);
+
+        JRDesignExpression emptyDs = new JRDesignExpression();
+        emptyDs.setText("new net.sf.jasperreports.engine.JREmptyDataSource()");
+        subreport.setDataSourceExpression(emptyDs);
+
+        JRDesignExpression reportExpr = new JRDesignExpression();
+        reportExpr.setText("$F{" + JasperModularDataFiller.SUBREPORT_REPORT_FIELD + "}");
+        subreport.setExpression(reportExpr);
+
+        DesignListContents contents = new DesignListContents();
+        contents.setHeight(SUBREPORT_HEIGHT);
+        contents.setWidth(width);
+        contents.addElement(subreport);
+
+        StandardListComponent listComponent = new StandardListComponent();
+        listComponent.setDatasetRun(datasetRun);
+        listComponent.setContents(contents);
+
+        JRDesignComponentElement element = new JRDesignComponentElement();
+        element.setX(0);
+        element.setY(0);
+        element.setWidth(width);
+        element.setHeight(SUBREPORT_HEIGHT);
+        element.setComponent(listComponent);
+        applyComponentKeyIfNeeded(element, "list");
+        return element;
+    }
+
     private void applyComponentKeyIfNeeded(JRDesignComponentElement element,
                                            String componentName) {
         try {
@@ -374,7 +423,7 @@ public class JrxmlTemplateInjector {
             Method setter = element.getClass().getMethod("setComponentKey", keyClass);
             setter.invoke(element, key);
         } catch (ClassNotFoundException ignored) {
-            // JR7: ComponentKey removed, namespace inferred automatically — expected path.
+            // JR7: ComponentKey removed, namespace inferred automatically - expected path.
         } catch (ReflectiveOperationException e) {
             messager.printMessage(Diagnostic.Kind.WARNING,
                                   "Could not set ComponentKey for " + componentName

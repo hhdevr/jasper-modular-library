@@ -7,6 +7,7 @@ import com.chaykin.jasper.core.annotation.JasperIgnore;
 import com.chaykin.jasper.core.annotation.JasperModularReport;
 import com.chaykin.jasper.core.annotation.JasperSubreport;
 import com.chaykin.jasper.core.annotation.PageOrientation;
+import com.chaykin.jasper.core.contract.JasperModularDataFiller;
 import com.chaykin.jasper.processor.model.JrxmlDataset;
 import com.chaykin.jasper.processor.model.JrxmlDatasetField;
 import com.chaykin.jasper.processor.model.JrxmlParameter;
@@ -51,13 +52,6 @@ import java.util.function.Predicate;
 
 /**
  * Annotation processor that generates and updates JRXML report templates at compile time.
- *
- * <p>Triggered by {@link JasperModularReport} and {@link JasperSubreport}. Inspects
- * declared fields and either creates a new JRXML or injects missing elements into an
- * existing one, depending on {@link GenerationMode}.</p>
- *
- * <p>Subreport fields must be declared with the concrete {@link JasperSubreport}-annotated
- * type, not a base type — the processor resolves the annotation from the declared type.</p>
  */
 @SupportedAnnotationTypes({
         "com.chaykin.jasper.core.annotation.JasperModularReport",
@@ -178,11 +172,9 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     }
 
     /**
-     * Loads an existing JRXML from the classpath, or falls back to creating a blank design.
-     *
-     * <p>Uses the processor classloader rather than {@code SOURCE_OUTPUT} because Maven
-     * copies {@code src/main/resources} to {@code target/classes} before compilation,
-     * making the existing template available on the classpath on subsequent runs.</p>
+     * Loads an existing JRXML from the classpath, or falls back to a blank design.
+     * Reads via the processor classloader because Maven copies {@code src/main/resources}
+     * to {@code target/classes} before compilation.
      */
     private JasperDesign resolveDesign(String templatePath,
                                        TypeElement classElement) throws Exception {
@@ -251,8 +243,8 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     }
 
     /**
-     * Walks the class hierarchy from {@code start} upward, applying {@code action} to every
-     * non-{@link JasperIgnore} field, until {@code stopAt} matches or the hierarchy ends.
+     * Walks the class hierarchy upward, applying {@code action} to every non-{@link JasperIgnore}
+     * field, until {@code stopAt} matches or the hierarchy ends.
      */
     private void forEachField(TypeElement start,
                               Predicate<TypeElement> stopAt,
@@ -317,17 +309,15 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
         TypeElement elementClass = (TypeElement) typeUtils.asElement(elementType);
 
-        if (elementClass != null && isJasperModularDataFiller(elementClass)) {
-            messager.printMessage(Diagnostic.Kind.ERROR,
-                                  "List of subreports is not supported. Field: "
-                                  + field.getSimpleName(), field);
+        if (elementClass != null && elementClass.getAnnotation(JasperSubreport.class) != null) {
+            describeSubreportListField(elementClass, result);
             return;
         }
 
         JasperCollection collectionAnn = field.getAnnotation(JasperCollection.class);
         CollectionComponentType componentType = collectionAnn != null
                                                 ? collectionAnn.type()
-                                                : CollectionComponentType.LIST;
+                                                : CollectionComponentType.TABLE;
         int columnWidth = collectionAnn != null
                           ? collectionAnn.columnWidth()
                           : JasperCollection.DEFAULT_COLUMN_WIDTH;
@@ -342,6 +332,30 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         result.add(new JrxmlParameter(field.getSimpleName().toString(),
                                       JR_BEAN_COLLECTION_DS,
                                       dataset));
+    }
+
+    /**
+     * Describes a collection of {@link JasperSubreport} modules as a repeating subreport.
+     */
+    private void describeSubreportListField(TypeElement elementClass, List<JrxmlParameter> result) {
+        JasperSubreport ann = elementClass.getAnnotation(JasperSubreport.class);
+        String prefix = ann.prefix().isEmpty()
+                        ? elementClass.getSimpleName().toString()
+                        : ann.prefix();
+
+        JrxmlDataset dataset = new JrxmlDataset(
+                prefix + "Dataset",
+                List.of(new JrxmlDatasetField(JasperModularDataFiller.SUBREPORT_PARAMS_FIELD,
+                                              "java.util.Map"),
+                        new JrxmlDatasetField(JasperModularDataFiller.SUBREPORT_REPORT_FIELD,
+                                              "net.sf.jasperreports.engine.JasperReport")),
+                CollectionComponentType.LIST,
+                JasperCollection.DEFAULT_COLUMN_WIDTH);
+
+        result.add(new JrxmlParameter(prefix + "DataSource",
+                                      "net.sf.jasperreports.engine.JRDataSource",
+                                      dataset,
+                                      prefix));
     }
 
     private JrxmlDataset describeDataset(String name,
@@ -364,44 +378,23 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
     private GenerationMode resolveMode(TypeElement classElement) {
         JasperModularReport root = classElement.getAnnotation(JasperModularReport.class);
-        if (root != null) {
-            return root.mode();
-        }
-
-        JasperSubreport sub = classElement.getAnnotation(JasperSubreport.class);
-        if (sub != null) {
-            return sub.mode();
-        }
-
-        return GenerationMode.INJECT;
+        return root != null
+               ? root.mode()
+               : classElement.getAnnotation(JasperSubreport.class).mode();
     }
 
     private String resolveTemplatePath(TypeElement classElement) {
         JasperModularReport root = classElement.getAnnotation(JasperModularReport.class);
-        if (root != null) {
-            return root.templatePath();
-        }
-
-        JasperSubreport sub = classElement.getAnnotation(JasperSubreport.class);
-        if (sub != null) {
-            return sub.templatePath();
-        }
-
-        return "reports/" + toSnakeCase(classElement.getSimpleName().toString()) + ".jrxml";
+        return root != null
+               ? root.templatePath()
+               : classElement.getAnnotation(JasperSubreport.class).templatePath();
     }
 
     private PageOrientation resolveOrientation(TypeElement classElement) {
         JasperModularReport root = classElement.getAnnotation(JasperModularReport.class);
-        if (root != null) {
-            return root.orientation();
-        }
-
-        JasperSubreport sub = classElement.getAnnotation(JasperSubreport.class);
-        if (sub != null) {
-            return sub.orientation();
-        }
-
-        return PageOrientation.PORTRAIT;
+        return root != null
+               ? root.orientation()
+               : classElement.getAnnotation(JasperSubreport.class).orientation();
     }
 
     private boolean isCollection(TypeMirror type) {
@@ -443,7 +436,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     }
 
     /**
-     * Erases generic type arguments and boxes primitives for use as a JRXML {@code class} attribute.
+     * Erases generics and boxes primitives for use as a JRXML {@code class} attribute.
      */
     private String resolveJrxmlClass(TypeMirror typeMirror) {
         if (typeMirror.getKind().isPrimitive()) {
@@ -452,10 +445,5 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                             .toString();
         }
         return typeUtils.erasure(typeMirror).toString();
-    }
-
-    private String toSnakeCase(String name) {
-        return name.replaceAll("([a-z])([A-Z])", "$1_$2")
-                   .toLowerCase();
     }
 }

@@ -7,39 +7,29 @@
 
 **A Spring Boot library for simplifying and unifying JasperReports report development.**
 
-Working with JasperReports in Java projects is hard. Passing data into templates is fragile and
-awkward, approaches vary wildly between projects, and any non-trivial report quickly devolves into
-a mess of SQL in XML, manual parameter mapping, and repetitive boilerplate.
-
-The only realistic way to tame this complexity is modularity. When a report is assembled from
-reusable subreport components — each with its own data and design — the structure becomes clear and
-manageable. But the problem is that working with subreports directly in JasperReports is no easier.
-There is no built-in mechanism that makes it simple and logical: you have to manually declare
-parameters in the root report's JRXML, keep them in sync with Java code, pass each parameter by
-name — and update everything in multiple places on every change.
-
-jasper-modular solves both problems at once — the data chaos and the subreport complexity. You
-simply declare a subreport as a field in a Java class and annotate it — the processor generates the
-required parameters in the JRXML at compile time, and the runtime passes everything automatically.
-Data is described as plain Java objects, and JRXML contains only design.
+jasper-modular brings modularity to JasperReports: you assemble a report from reusable subreport
+components, each declared as an annotated field in a Java class. The processor generates the
+required parameters in the JRXML at compile time, and the runtime passes everything automatically —
+data is described as plain Java objects, and JRXML contains only design.
 
 **What makes this different**
 
-In standard JasperReports, subreport data is typically passed parameter-by-parameter: every field
-the subreport needs must be declared individually in the parent JRXML and wired by hand — one
-`<subreportParameter>` per field, one `params.put()` per field in Java. With many subreports this
-quickly becomes dozens of manual entries across multiple files.
+In standard JasperReports, subreport data is passed parameter-by-parameter: every field must be
+declared individually in the parent JRXML and wired by hand — one `<subreportParameter>` per field,
+one `params.put()` per field in Java. With many subreports this becomes dozens of manual entries
+across multiple files.
 
-jasper-modular uses a different technique: every subreport always receives exactly two parameters —
+jasper-modular uses a different technique: a single embedded subreport receives exactly two parameters —
 the compiled report object (`<prefix>Report`) and a single `Map<String, Object>`
 (`<prefix>MapParameter`) containing all of the subreport's data. Inside the subreport, the map
 is automatically unpacked into individual parameters by JasperReports' built-in
-`REPORT_PARAMETERS_MAP` mechanism. This is a little-known JasperReports capability that eliminates
-parameter-by-parameter drilling entirely.
+`REPORT_PARAMETERS_MAP` mechanism — a little-known capability that eliminates
+parameter-by-parameter drilling entirely. A `List` of subreport modules is rendered as a repeating
+subreport instead — one instance per element (see [Lists of subreports](#lists-of-subreports)).
 
 Both parameters are generated automatically from your Java class fields at compile time: you never
-declare them, you never wire them, you never think about them. By the time you open the template in
-Jaspersoft Studio, the parameters are already there. You just use your data.
+declare or wire them. By the time you open the template in Jaspersoft Studio, they are already
+there.
 
 ---
 
@@ -48,23 +38,20 @@ Jaspersoft Studio, the parameters are already there. You just use your data.
 Every project tames subreports differently, and almost every approach carries its own set of
 problems:
 
-**One giant JSON for everything** — data is serialized into a single massive JSON object and passed
-to all subreports via `JsonDataSource`. Subreports extract the data they need using JSON paths
-directly in JRXML. Data-selection logic ends up in XML templates, which makes debugging extremely
-painful.
+**One giant JSON for everything** — data is serialized into a single massive JSON object passed to
+all subreports via `JsonDataSource`, which extract what they need using JSON paths in JRXML; the
+data-selection logic ends up in XML templates and is painful to debug.
 
-**Direct SQL connection** — the subreport receives `REPORT_CONNECTION` (the same JDBC connection as
-the root report) and executes its own SQL query. Data is filtered through parameters passed down
-from the root report. Business logic and SQL accumulate inside JRXML.
+**Direct SQL connection** — the subreport receives `REPORT_CONNECTION` and runs its own SQL query,
+so business logic and SQL accumulate inside JRXML.
 
 **Passing `REPORT_DATA_SOURCE` directly** — the root report's data source is forwarded to the
-subreport. A data source is a consumable object — it can only be used once, after which it is
-exhausted. This causes subtle, hard-to-trace bugs.
+subreport, but a data source is consumable and can only be used once, causing subtle, hard-to-trace
+bugs.
 
-**Manual parameter drilling through a cascade of subreports** — each subreport parameter is declared
-individually in the root report's JRXML and mapped by hand. With many subreports this means dozens
-of `<subreportParameter>` entries per template. Adding a new field requires updating three places:
-the Java class, the root JRXML, and the subreport JRXML — drift and typos are inevitable.
+**Manual parameter drilling through a cascade of subreports** — each parameter is declared and
+mapped by hand, so adding one field means updating three places (Java class, root JRXML, subreport
+JRXML) and drift and typos are inevitable.
 
 **With jasper-modular:**
 
@@ -74,7 +61,7 @@ the Java class, the root JRXML, and the subreport JRXML — drift and typos are 
 - The runtime compiles, fills, and assembles the entire report — including all subreports and their
   data — no manual boilerplate
 - All data is passed through typed POJO-DTOs — JRXML contains only design
-- Building individual report components and reusing them across reports becomes simple and natural
+- Build a component once and drop it into any report as a field
 
 ---
 
@@ -220,8 +207,8 @@ CompanyReport (@JasperModularReport)
         └── grossProfit, operatingProfit, netProfit, margin, List<ProfitBreakdown>
 ```
 
-Each module is a standalone class with its own JRXML template. The root report simply declares them
-as fields — everything else is handled automatically.
+Each module is a standalone class with its own JRXML template. The root report declares them as
+fields; the processor wires the parameters and the renderer assembles the document.
 
 **Result:**
 
@@ -236,11 +223,9 @@ as fields — everything else is handled automatically.
 
 ## Data philosophy
 
-The library intentionally uses **POJO-DTOs** as the only way to pass data into a report.
-
-This means you do not write SQL queries inside JRXML and do not transform data into JSON. You
-retrieve data from the database using any approach you prefer (JPA, JDBC, external API), perform all
-necessary calculations and mapping in plain Java code, and pass the ready objects to the report.
+The library intentionally uses **POJO-DTOs** as the only way to pass data into a report — no SQL in
+JRXML, no JSON. You retrieve data however you prefer (JPA, JDBC, external API), perform all
+calculations and mapping in plain Java code, and pass the ready objects to the report.
 
 ```java
 // Fetch data as usual
@@ -252,12 +237,9 @@ double growth = calculateGrowth(items);
 RevenueModule revenue = new RevenueModule(total, growth, items);
 ```
 
-Benefits of this approach:
-
-- **Readability** — the data structure is described by Java fields, not SQL in XML
-- **Control** — all calculations, formatting, and business logic happen in Java before rendering
-- **Type safety** — the compiler and IDE prevent typos in field names
-- **Testability** — the report model is a plain POJO, easily testable without rendering a PDF
+The payoff: the data structure lives in Java fields instead of SQL buried in XML, and all
+calculations and formatting run in plain code before rendering. The compiler catches typos in field
+names, and the report model stays a POJO you can unit-test without ever producing a PDF.
 
 ---
 
@@ -265,47 +247,37 @@ Benefits of this approach:
 
 ### At compile time
 
-The annotation processor (`JrxmlGeneratorProcessor`) runs during `mvn compile` and inspects all
-classes annotated with `@JasperModularReport` and `@JasperSubreport`. For each class it:
+The annotation processor (`JrxmlGeneratorProcessor`) runs during `mvn compile`, inspects every class
+annotated with `@JasperModularReport` and `@JasperSubreport`, and injects the missing elements into
+the existing JRXML template:
 
-1. Reads all non-ignored fields via the Java Compiler API
-2. Identifies subreport fields, collection fields, and scalar fields
-3. Injects missing elements into the existing JRXML template:
-    - `<parameter>` for each field
-    - `<dataset>` and a `list` or `table` component for each `Collection<T>` field
-    - Subreport bands in the `<detail>` section for each subreport field
-4. Writes the updated JRXML to `target/generated-sources`
+- `<parameter>` for each field
+- `<dataset>` and a `list` or `table` component for each `Collection<T>` field
+- Subreport bands in the `<detail>` section for each subreport field
 
 Existing elements are detected by name and never overwritten — custom layout, styles, and
 expressions created in Jaspersoft Studio are always preserved.
 
 ### At runtime
 
-When `render(module)` is called:
-
-1. The template is compiled from the JRXML resource (or retrieved from the in-memory cache)
-2. All fields are traversed via reflection to build the `Map<String, Object>` parameters map
-3. Subreport fields are recursively compiled and filled, injecting `<prefix>Report` and
-   `<prefix>MapParameter`
-4. Collection fields are stored in the parameters map as `JRBeanCollectionDataSource` values —
-   they are **parameters**, not the root data source. In JRXML, reference them via
-   `$P{fieldName}` in the `<dataSourceExpression>` of a `list` or `table` component
-5. `JasperFillManager.fillReport()` is called with the parameters map and `JREmptyDataSource`
-   as the root data source — the library never uses band-iteration data sources
-6. The resulting `JasperPrint` is returned for export to any format
+When `render(module)` is called, the template is compiled from the JRXML resource (or taken from the
+in-memory cache), and all fields are traversed via reflection to build the `Map<String, Object>`
+parameters map. Subreport fields are recursively compiled and filled, injecting `<prefix>Report` and
+`<prefix>MapParameter`. Collection fields are stored in the map as `JRBeanCollectionDataSource`
+values. These are **parameters**, not the root data source: in JRXML you reference them via
+`$P{fieldName}` in the `<dataSourceExpression>` of a `list` or `table` component. The fill uses
+`JasperFillManager.fillReport()` with `JREmptyDataSource` as the root data source (the library never
+uses band-iteration data sources) and returns a `JasperPrint` for export to any format.
 
 Circular subreport dependencies (e.g. `A -> B -> A`) are detected automatically and throw a
-`JasperModularException` with a clear message identifying the offending class, rather than
-propagating a `StackOverflowError`.
+`JasperModularException` identifying the offending class, rather than a `StackOverflowError`.
 
 ### Startup precompilation
 
-On application startup, `JasperReportPrecompiler` scans the configured base package and precompiles
-all report templates, storing them in the shared `JasperModularCompiler.CACHE`. This eliminates
-compilation latency on the first report request in production.
-
-If any template fails to compile, the error is logged and the exception is rethrown — the
-application will not start with broken report templates.
+On startup, `JasperReportPrecompiler` scans the configured base package and precompiles all
+templates into the shared `JasperModularCompiler.CACHE`, eliminating compilation latency on the first
+request. If any template fails to compile, the exception is rethrown — the application will not start
+with broken report templates.
 
 ---
 
@@ -313,67 +285,18 @@ application will not start with broken report templates.
 
 ### New report — CREATE mode
 
-When you create a new report class with `mode = GenerationMode.CREATE` and run `mvn compile`, a
-ready-to-use JRXML file appears in `target/generated-sources`. It already contains everything
-needed:
-
-- `<parameter>` for every field in the class
-- `<dataset>` with fields for every collection
-- A `list` or `table` component for displaying collection data
-- Subreport bands in the `<detail>` section for every subreport field
-
-**Your workflow:**
-
-1. Open the generated file from `target/generated-sources` in Jaspersoft Studio
-2. Add your design — place elements, configure fonts, colors, headers
-3. Save the finished template to `src/main/resources/reports/`
-
-All parameters, datasets, and subreports are already in place — you only need to add the design.
+With `mode = GenerationMode.CREATE`, `mvn compile` produces a ready-to-use JRXML in
+`target/generated-sources` containing everything — a `<parameter>` for every field, a `<dataset>`
+and `list`/`table` component for every collection, and subreport bands for every subreport field.
+Open it in Jaspersoft Studio, add your design (elements, fonts, colors, headers), and save the
+finished template to `src/main/resources/reports/`.
 
 ### Existing report — INJECT mode (default)
 
-When you add a new field or a new subreport to an existing report class, the processor generates a
-new file in `target/generated-sources` on the next compile. It contains your original template plus
-only the missing elements — new parameters, datasets, subreports. Everything that was already in the
-template is left untouched.
-
-**Your workflow:**
-
-1. Add a field to the Java class
-2. Run `mvn compile`
-3. Open the updated file from `target/generated-sources` in Jaspersoft Studio — the new parameters
-   are there
-4. Place the new elements in the design and copy the file back to `src/main/resources/reports/`
-
-### Overall flow
-
-```
-                    mvn compile
-                        |
-        +---------------+---------------+
-        |                               |
-   new class                    existing class
-   mode = CREATE                mode = INJECT (default)
-        |                               |
-        v                               v
-  blank template               your template + new
-  + all parameters             parameters/datasets/
-  + datasets                   subreports
-  + list/table components
-  + subreport bands
-        |                               |
-        +---------------+---------------+
-                        v
-              target/generated-sources/
-                   your_report.jrxml
-                        |
-                        v
-              Jaspersoft Studio — add (CREATE) or update (INJECT) your design
-                        |
-                        v
-              src/main/resources/reports/
-                   your_report.jrxml  ← final template
-```
+When you add a field or subreport to an existing report class, the next `mvn compile` writes a file
+to `target/generated-sources` containing your original template plus only the missing elements —
+everything already in the template is left untouched. Open it in Jaspersoft Studio, place the new
+elements in the design, and copy the file back to `src/main/resources/reports/`.
 
 ---
 
@@ -442,13 +365,46 @@ Controls the JRXML component type for a collection field.
 | `type`        | `CollectionComponentType` | No       | `LIST` or `TABLE` (default: `TABLE`)        |
 | `columnWidth` | `int`                     | No       | Pixel width of each column (default: `100`) |
 
-When `@JasperCollection` is absent, the processor defaults to a `list` component for backwards
-compatibility.
+The default component type is `TABLE` — whether the annotation is present (without an explicit
+`type`) or absent entirely. Use `type = CollectionComponentType.LIST` for a `list` component.
 
 ```java
 @JasperCollection(type = CollectionComponentType.TABLE, columnWidth = 80)
 private List<LineItem> items;
 ```
+
+### Lists of subreports
+
+How a `List` field is rendered depends entirely on its **element type** — the two cases are kept
+strictly separate:
+
+| Element type                | Rendered as                                                  | Field annotation         |
+|-----------------------------|--------------------------------------------------------------|--------------------------|
+| Plain data class (bean)     | An inline `list` / `table` component in the same template    | `@JasperCollection` (opt.) |
+| A `@JasperSubreport` module | A **repeating subreport** — one subreport instance per element | none                     |
+
+When the element type is a `@JasperSubreport` module, the list is treated as real subreports: the
+processor injects a repeating subreport into the parent template, and at runtime each element is
+filled recursively into its own parameter map and rendered once. No manual JRXML wiring is needed,
+and `@JasperCollection` does not apply.
+
+```java
+// Inline — element is a plain bean → list/table of the report
+@JasperCollection(type = CollectionComponentType.TABLE)
+private List<LineItem> items;
+
+// Repeating subreport — element is a @JasperSubreport module → rendered once per element
+private List<DepartmentModule> departments;
+```
+
+**Choosing between them:**
+
+- Inline `list` / `table` — for plain tabular rows. Lightweight: one template, no extra compilation.
+- Repeating subreport — when each element is a self-contained, reusable section with its own layout
+  (or its own nesting / page break).
+
+A self-referential module (a `@JasperSubreport` class holding a `List` of itself) is rejected by the
+circular-dependency guard.
 
 ### `@JasperIgnore`
 
