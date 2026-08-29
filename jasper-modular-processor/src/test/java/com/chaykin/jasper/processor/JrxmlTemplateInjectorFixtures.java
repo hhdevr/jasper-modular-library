@@ -135,4 +135,29 @@ final class JrxmlTemplateInjectorFixtures {
                                    null)
         );
     }
+
+    static final String SUBREPORT_LIST_PREFIX = "Artist";
+    static final String SUBREPORT_LIST_DATASET = "ArtistDataset";
+    static final String SUBREPORT_LIST_DS_PARAM = "ArtistDataSource";
+
+    /**
+     * Subreport-list params, mirroring what the processor emits for a {@code List<ArtistModule>}
+     * field: a shared {@code <prefix>Report} param plus a {@code <prefix>DataSource} param
+     * carrying a single-field ({@code params}) dataset. The non-null dataset together with the
+     * non-null subreport prefix flags it for repeating-subreport injection.
+     */
+    static List<JrxmlParameter> subreportListParams() {
+        JrxmlDataset dataset = new JrxmlDataset(
+                SUBREPORT_LIST_DATASET,
+                List.of(new JrxmlDatasetField("params", "java.util.Map"),
+                        new JrxmlDatasetField("report", "net.sf.jasperreports.engine.JasperReport")),
+                CollectionComponentType.LIST,
+                DEFAULT_COLUMN_WIDTH);
+        return List.of(
+                new JrxmlParameter(SUBREPORT_LIST_DS_PARAM,
+                                   "net.sf.jasperreports.engine.JRDataSource",
+                                   dataset,
+                                   SUBREPORT_LIST_PREFIX)
+        );
+    }
 }

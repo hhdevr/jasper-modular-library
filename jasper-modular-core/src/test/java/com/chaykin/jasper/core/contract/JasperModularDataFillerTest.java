@@ -15,11 +15,16 @@ import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullSubre
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullableReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.OtherModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ScalarReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SelfNodeModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SummaryModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleListReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleReport;
 import com.chaykin.jasper.core.exception.JasperModularException;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
+import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -131,16 +136,6 @@ class JasperModularDataFillerTest {
             assertThat(params).doesNotContainKey("items");
         }
 
-        @Test
-        @DisplayName("List whose element type is a subreport module throws JasperModularException")
-        void listOfSubreportModules_throwsException() {
-            // given
-            var report = new SubreportListReport(List.of(new ItemsModule("x")));
-
-            // when / then
-            assertThatThrownBy(report::fillMapParameters).isInstanceOf(JasperModularException.class)
-                                                         .hasMessageContaining("List of subreports is not supported. Field: modules");
-        }
     }
 
     @Nested
@@ -306,6 +301,137 @@ class JasperModularDataFillerTest {
             assertThat(summaryParams).containsKey("CurrencyReport");
         }
 
+    }
+
+    @Nested
+    @DisplayName("subreport lists")
+    class SubreportLists {
+
+        @Test
+        @DisplayName("List of subreport modules produces a single <prefix>DataSource of element maps")
+        void listOfSubreportModules_producesRepeatingSubreport() {
+            // given
+            var report = new SubreportListReport(List.of(new ItemsModule("a"), new ItemsModule("b")));
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then - the compiled report rides in the data source rows, not as a separate param
+            assertThat(params).containsKey("ItemsDataSource")
+                              .doesNotContainKey("ItemsReport");
+            assertThat(params.get("ItemsDataSource")).isInstanceOf(JRMapCollectionDataSource.class);
+        }
+
+        @Test
+        @DisplayName("data source carries one row per element")
+        void dataSource_hasOneRowPerElement() throws Exception {
+            // given
+            var report = new SubreportListReport(
+                    List.of(new ItemsModule("a"), new ItemsModule("b"), new ItemsModule("c")));
+
+            // when
+            var dataSource =
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("ItemsDataSource");
+
+            // then
+            int rows = 0;
+            while (dataSource.next()) {
+                rows++;
+            }
+            assertThat(rows).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("empty list produces no parameters")
+        void emptyList_isSkipped() {
+            // given
+            var report = new SubreportListReport(List.of());
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            assertThat(params).doesNotContainKey("ItemsReport")
+                              .doesNotContainKey("ItemsDataSource");
+        }
+
+        @Test
+        @DisplayName("self-referential subreport module throws circular dependency")
+        void selfReferentialModule_throwsCircularDependency() {
+            // given
+            var root = new SelfNodeModule(List.of(new SelfNodeModule(List.of())));
+
+            // when / then
+            assertThatThrownBy(root::fillMapParameters)
+                    .isInstanceOf(JasperModularException.class)
+                    .hasMessageContaining("Circular subreport dependency");
+        }
+    }
+
+    @Nested
+    @DisplayName("empty subreports (isEmpty)")
+    class EmptySubreports {
+
+        @Test
+        @DisplayName("empty single subreport is skipped - no parameters produced")
+        void emptySingleSubreport_isSkipped() {
+            // given
+            var report = new ToggleReport(new ToggleModule(true));
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            assertThat(params).doesNotContainKey("ToggleReport")
+                              .doesNotContainKey("ToggleMapParameter");
+        }
+
+        @Test
+        @DisplayName("non-empty single subreport produces its two parameters")
+        void nonEmptySingleSubreport_isIncluded() {
+            // given
+            var report = new ToggleReport(new ToggleModule(false));
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            assertThat(params).containsKey("ToggleReport")
+                              .containsKey("ToggleMapParameter");
+        }
+
+        @Test
+        @DisplayName("empty elements are dropped from a subreport list")
+        void emptyElements_areDroppedFromList() throws Exception {
+            // given
+            var report = new ToggleListReport(List.of(
+                    new ToggleModule(false), new ToggleModule(true), new ToggleModule(false)));
+
+            // when
+            var dataSource =
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("ToggleDataSource");
+
+            // then
+            int rows = 0;
+            while (dataSource.next()) {
+                rows++;
+            }
+            assertThat(rows).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("a list of only empty elements produces no data source parameter")
+        void allEmptyList_producesNoParameter() {
+            // given
+            var report = new ToggleListReport(
+                    List.of(new ToggleModule(true), new ToggleModule(true)));
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            assertThat(params).doesNotContainKey("ToggleDataSource");
+        }
     }
 
 }

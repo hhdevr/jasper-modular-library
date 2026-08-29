@@ -3,61 +3,39 @@ package com.chaykin.jasper.core.contract;
 import com.chaykin.jasper.core.annotation.JasperIgnore;
 import com.chaykin.jasper.core.annotation.JasperSubreport;
 import com.chaykin.jasper.core.exception.JasperModularException;
+import com.chaykin.jasper.core.model.SubreportModule;
+import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
+import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Base class responsible for building the JasperReports parameters map from the fields
- * of a report or subreport module at runtime.
- *
- * <p>All report and subreport classes inherit from this class via
- * {@link com.chaykin.jasper.core.model.ModularReport} or
- * {@link com.chaykin.jasper.core.model.SubreportModule}. Calling {@link #fillMapParameters()}
- * triggers reflection-based traversal of all declared fields up the class hierarchy
- * (stopping at this class), building a {@code Map<String, Object>} that is passed directly
- * to {@code JasperFillManager.fillReport}.</p>
- *
- * <h2>Field handling rules</h2>
- * <ul>
- *   <li>Fields annotated with {@link JasperIgnore} are skipped entirely.</li>
- *   <li>Fields whose runtime type is annotated with {@link JasperSubreport} are treated as
- *       embedded subreports. Two entries are added: {@code <prefix>Report} (the compiled
- *       {@code JasperReport}) and {@code <prefix>MapParameter}
- *       (the subreport's own parameters map, filled recursively).</li>
- *   <li>Fields of type {@link Collection} are wrapped in a {@link JRBeanCollectionDataSource}
- *       and stored as a parameter under the field name — referenced from the JRXML via
- *       {@code $P{fieldName}}, not as the root data source. Collections of subreport modules
- *       are not supported and will throw at runtime.</li>
- *   <li>All other non-null fields are stored as plain parameters under the field name.</li>
- * </ul>
- *
- * <h2>Circular dependency detection</h2>
- * <p>The recursive subreport filling is protected against circular dependencies.
- * If a cycle is detected (e.g. {@code A -> B -> A}), a {@link JasperModularException}
- * is thrown immediately with a clear message identifying the offending class,
- * rather than allowing a {@code StackOverflowError} to propagate.</p>
- *
- * <p>Diamond-shaped graphs (e.g. {@code A -> B}, {@code A -> C}, {@code B -> D},
- * {@code C -> D}) are handled correctly: the shared module {@code D} is visited
- * independently in both branches without false cycle detection.</p>
+ * Base class that builds the JasperReports parameters map from the fields of a report
+ * or subreport module via reflection.
  */
 public class JasperModularDataFiller {
+
+    /** JRXML field name carrying each element's parameter map inside a generated subreport list. */
+    public static final String SUBREPORT_PARAMS_FIELD = "params";
+
+    /** JRXML field name carrying the shared compiled report inside a generated subreport list. */
+    public static final String SUBREPORT_REPORT_FIELD = "report";
 
     /**
      * Traverses all declared fields up the class hierarchy and builds the JasperReports
      * parameters map.
      *
-     * @return a non-null map of parameter names to values, ready for {@code JasperFillManager}
-     * @throws JasperModularException on reflection failure, subreport compilation failure,
-     *                                a circular subreport dependency, or a {@code List} of
-     *                                subreport modules
+     * @throws JasperModularException on reflection failure, subreport compilation failure, or a
+     *                                circular subreport dependency
      */
     public Map<String, Object> fillMapParameters() {
         Map<String, Object> params = new HashMap<>();
@@ -103,13 +81,25 @@ public class JasperModularDataFiller {
 
             JasperSubreport ann = value.getClass().getAnnotation(JasperSubreport.class);
             if (ann != null) {
+                if (value instanceof SubreportModule module && module.isEmpty()) {
+                    return;
+                }
                 putSubreport(field, (JasperModularCompiler) value, ann, params, visited);
                 return;
             }
 
             if (Collection.class.isAssignableFrom(field.getType())) {
-                validateCollectionElementType(field);
-                putCollection(field.getName(), (Collection<?>) value, params);
+                Class<?> elementType = collectionElementType(field);
+                if (elementType != null && elementType.isAnnotationPresent(JasperSubreport.class)) {
+                    putSubreportList((Collection<?>) value, elementType, params, visited);
+                } else if (elementType != null
+                           && JasperModularDataFiller.class.isAssignableFrom(elementType)) {
+                    throw new JasperModularException(
+                            "Collection elements that are modular reports must be annotated "
+                            + "with @JasperSubreport. Field: " + field.getName());
+                } else {
+                    putCollection(field.getName(), (Collection<?>) value, params);
+                }
             } else {
                 putParameter(field.getName(), value, params);
             }
@@ -120,14 +110,13 @@ public class JasperModularDataFiller {
         }
     }
 
-    private void validateCollectionElementType(Field field) {
-        if (field.getGenericType() instanceof ParameterizedType pt) {
-            Class<?> elementType = (Class<?>) pt.getActualTypeArguments()[0];
-            if (JasperModularDataFiller.class.isAssignableFrom(elementType)) {
-                throw new JasperModularException(
-                        "List of subreports is not supported. Field: " + field.getName());
-            }
+    private Class<?> collectionElementType(Field field) {
+        if (field.getGenericType() instanceof ParameterizedType pt
+            && pt.getActualTypeArguments().length > 0
+            && pt.getActualTypeArguments()[0] instanceof Class<?> elementType) {
+            return elementType;
         }
+        return null;
     }
 
     private void putSubreport(Field field, JasperModularCompiler module,
@@ -142,20 +131,48 @@ public class JasperModularDataFiller {
         params.put(prefix + "MapParameter", childParams);
     }
 
-    /**
-     * Adds a scalar parameter, skipping {@code null} values. Protected so subclasses
-     * overriding {@link #fillMapParameters()} can inject custom parameters.
-     */
+    /** Renders a collection of {@link JasperSubreport}-annotated modules as a repeating subreport. */
+    private void putSubreportList(Collection<?> data,
+                                  Class<?> elementType,
+                                  Map<String, Object> params,
+                                  Set<Class<?>> visited) {
+        if (data.isEmpty()) {
+            return;
+        }
+
+        JasperSubreport ann = elementType.getAnnotation(JasperSubreport.class);
+        String prefix = ann.prefix().isEmpty() ? elementType.getSimpleName() : ann.prefix();
+
+        JasperReport compiled = null;
+        List<Map<String, ?>> rows = new ArrayList<>();
+        for (Object element: data) {
+            if (element instanceof SubreportModule module && module.isEmpty()) {
+                continue;
+            }
+            if (compiled == null) {
+                compiled = ((JasperModularCompiler) element).compileReport();
+            }
+            Map<String, Object> childParams = new HashMap<>();
+            ((JasperModularDataFiller) element).fillMapParameters(childParams, visited);
+            rows.add(Map.of(SUBREPORT_PARAMS_FIELD,
+                            childParams,
+                            SUBREPORT_REPORT_FIELD,
+                            compiled));
+        }
+        if (rows.isEmpty()) {
+            return;
+        }
+        params.put(prefix + "DataSource", new JRMapCollectionDataSource(rows));
+    }
+
+    /** Adds a scalar parameter, skipping {@code null} values. */
     protected void putParameter(String key, Object value, Map<String, Object> params) {
         if (value != null) {
             params.put(key, value);
         }
     }
 
-    /**
-     * Wraps a non-empty collection in a {@link JRBeanCollectionDataSource} and stores it as
-     * a parameter. Empty and {@code null} collections are ignored.
-     */
+    /** Wraps a non-empty collection in a {@link JRBeanCollectionDataSource} and stores it as a parameter. */
     protected void putCollection(String key, Collection<?> data, Map<String, Object> params) {
         if (data != null && !data.isEmpty()) {
             params.put(key, new JRBeanCollectionDataSource(data));

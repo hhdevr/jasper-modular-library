@@ -144,6 +144,17 @@ final class JasperModularDataFillerFixture {
 
     }
 
+    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "SelfNode")
+    static class SelfNodeModule extends SubreportModule {
+
+        List<SelfNodeModule> children;
+
+        SelfNodeModule(List<SelfNodeModule> children) {this.children = children;}
+
+        @Override
+        public boolean isEmpty() {return false;}
+    }
+
     @JasperModularReport(templatePath = "/reports/multi.jrxml")
     static class MultiSubreportReport extends ModularReport {
 
@@ -207,6 +218,33 @@ final class JasperModularDataFillerFixture {
             this.financialModule = financial;
             this.summaryModule = summary;
         }
+    }
+
+    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Toggle")
+    static class ToggleModule extends SubreportModule {
+
+        boolean empty;
+
+        ToggleModule(boolean empty) {this.empty = empty;}
+
+        @Override
+        public boolean isEmpty() {return empty;}
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreport.jrxml")
+    static class ToggleReport extends ModularReport {
+
+        ToggleModule toggleModule;
+
+        ToggleReport(ToggleModule toggleModule) {this.toggleModule = toggleModule;}
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
+    static class ToggleListReport extends ModularReport {
+
+        List<ToggleModule> modules;
+
+        ToggleListReport(List<ToggleModule> modules) {this.modules = modules;}
     }
 
 }
