@@ -11,9 +11,14 @@ import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.LineItem;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MultiSubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NoPrefixReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedItemsModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedListReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedOtherModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullSubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullableReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.OtherModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RichListReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RichModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ScalarReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SelfNodeModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportListReport;
@@ -23,8 +28,10 @@ import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleLis
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleReport;
 import com.chaykin.jasper.core.exception.JasperModularException;
+import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
 import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
+import net.sf.jasperreports.engine.design.JRDesignField;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -324,7 +331,7 @@ class JasperModularDataFillerTest {
 
         @Test
         @DisplayName("data source carries one row per element")
-        void dataSource_hasOneRowPerElement() throws Exception {
+        void dataSource_hasOneRowPerElement() {
             // given
             var report = new SubreportListReport(
                     List.of(new ItemsModule("a"), new ItemsModule("b"), new ItemsModule("c")));
@@ -353,6 +360,31 @@ class JasperModularDataFillerTest {
             // then
             assertThat(params).doesNotContainKey("ItemsReport")
                               .doesNotContainKey("ItemsDataSource");
+        }
+
+        @Test
+        @DisplayName("mixed module subclasses each render with their own compiled template")
+        void mixedSubclasses_eachRowCarriesOwnTemplate() {
+            // given
+            var report = new MixedListReport(
+                    List.of(new MixedItemsModule("a"), new MixedOtherModule("b")));
+
+            // when
+            var dataSource =
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("MixedDataSource");
+
+            // then - each row carries its element's template, not the first element's
+            JRDesignField reportField = new JRDesignField();
+            reportField.setName("report");
+
+            assertThat(dataSource.next()).isTrue();
+            Object firstRowReport = dataSource.getFieldValue(reportField);
+            assertThat(dataSource.next()).isTrue();
+            Object secondRowReport = dataSource.getFieldValue(reportField);
+
+            assertThat(firstRowReport).isSameAs(new MixedItemsModule("x").compileReport());
+            assertThat(secondRowReport).isSameAs(new MixedOtherModule("y").compileReport());
+            assertThat(firstRowReport).isNotSameAs(secondRowReport);
         }
 
         @Test
@@ -402,7 +434,7 @@ class JasperModularDataFillerTest {
 
         @Test
         @DisplayName("empty elements are dropped from a subreport list")
-        void emptyElements_areDroppedFromList() throws Exception {
+        void emptyElements_areDroppedFromList() {
             // given
             var report = new ToggleListReport(List.of(
                     new ToggleModule(false), new ToggleModule(true), new ToggleModule(false)));
@@ -431,6 +463,33 @@ class JasperModularDataFillerTest {
 
             // then
             assertThat(params).doesNotContainKey("ToggleDataSource");
+        }
+
+        @Test
+        @DisplayName("row map of a list element carries its own collection as a data source")
+        void elementWithCollection_rowMapCarriesDataSource() {
+            // given
+            var report = new RichListReport(List.of(
+                    new RichModule("Section A", List.of(new LineItem("Widget", BigDecimal.TEN)))));
+
+            // when
+            var dataSource =
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("RichDataSource");
+
+            // then
+            assertThat(dataSource.next()).isTrue();
+
+            JRDesignField paramsField = new JRDesignField();
+            paramsField.setName("params");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> rowParams =
+                    (Map<String, Object>) dataSource.getFieldValue(paramsField);
+            assertThat(rowParams).containsEntry("title", "Section A");
+            assertThat(rowParams.get("items")).isInstanceOf(JRBeanCollectionDataSource.class);
+
+            JRDesignField reportField = new JRDesignField();
+            reportField.setName("report");
+            assertThat(dataSource.getFieldValue(reportField)).isInstanceOf(JasperReport.class);
         }
     }
 

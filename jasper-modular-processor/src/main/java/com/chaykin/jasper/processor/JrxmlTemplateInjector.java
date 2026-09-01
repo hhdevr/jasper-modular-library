@@ -57,11 +57,11 @@ public class JrxmlTemplateInjector {
     /**
      * Injects all missing elements into the design and writes the result.
      *
-     * @throws Exception if injection or serialization fails
+     * @throws JRException if injection or serialization fails
      */
     public void inject(JasperDesign design,
                        List<JrxmlParameter> fields,
-                       OutputStream output) throws Exception {
+                       OutputStream output) throws JRException {
         injectDatasets(design, fields);
         injectParameters(design, fields);
         injectCollectionComponents(design, fields);
@@ -156,12 +156,12 @@ public class JrxmlTemplateInjector {
                      .filter(e -> e instanceof JRDesignComponentElement)
                      .map(e -> (JRDesignComponentElement) e)
                      .anyMatch(e -> {
-                         if (e.getComponent() instanceof StandardListComponent lc) {
-                             JRDesignDatasetRun run = (JRDesignDatasetRun) lc.getDatasetRun();
+                         if (e.getComponent() instanceof StandardListComponent listComponent) {
+                             JRDesignDatasetRun run = (JRDesignDatasetRun) listComponent.getDatasetRun();
                              return run != null && datasetName.equals(run.getDatasetName());
                          }
-                         if (e.getComponent() instanceof StandardTable tbl) {
-                             JRDesignDatasetRun run = (JRDesignDatasetRun) tbl.getDatasetRun();
+                         if (e.getComponent() instanceof StandardTable table) {
+                             JRDesignDatasetRun run = (JRDesignDatasetRun) table.getDatasetRun();
                              return run != null && datasetName.equals(run.getDatasetName());
                          }
                          return false;
@@ -186,9 +186,9 @@ public class JrxmlTemplateInjector {
             textField.setY(0);
             textField.setWidth(columnWidth);
             textField.setHeight(CELL_HEIGHT);
-            JRDesignExpression expr = new JRDesignExpression();
-            expr.setText("$F{" + datasetField.name() + "}");
-            textField.setExpression(expr);
+            JRDesignExpression expression = new JRDesignExpression();
+            expression.setText("$F{" + datasetField.name() + "}");
+            textField.setExpression(expression);
             contents.addElement(textField);
             x += columnWidth;
         }
@@ -203,6 +203,8 @@ public class JrxmlTemplateInjector {
         element.setWidth(totalWidth);
         element.setHeight(LIST_HEIGHT);
         element.setComponent(listComponent);
+        element.setPositionType(PositionTypeEnum.FLOAT);
+        element.setRemoveLineWhenBlank(true);
         applyComponentKeyIfNeeded(element, "list");
         return element;
     }
@@ -239,9 +241,9 @@ public class JrxmlTemplateInjector {
             detailTextField.setY(0);
             detailTextField.setWidth(columnWidth);
             detailTextField.setHeight(CELL_HEIGHT);
-            JRDesignExpression expr = new JRDesignExpression();
-            expr.setText("$F{" + datasetField.name() + "}");
-            detailTextField.setExpression(expr);
+            JRDesignExpression expression = new JRDesignExpression();
+            expression.setText("$F{" + datasetField.name() + "}");
+            detailTextField.setExpression(expression);
             detailCell.addElement(detailTextField);
             column.setDetailCell(detailCell);
 
@@ -254,6 +256,8 @@ public class JrxmlTemplateInjector {
         element.setWidth(totalWidth);
         element.setHeight(HEADER_HEIGHT + CELL_HEIGHT);
         element.setComponent(table);
+        element.setPositionType(PositionTypeEnum.FLOAT);
+        element.setRemoveLineWhenBlank(true);
         applyComponentKeyIfNeeded(element, "table");
         return element;
     }
@@ -261,9 +265,9 @@ public class JrxmlTemplateInjector {
     private JRDesignDatasetRun buildDatasetRun(JrxmlParameter field) {
         JRDesignDatasetRun datasetRun = new JRDesignDatasetRun();
         datasetRun.setDatasetName(field.dataset().name());
-        JRDesignExpression dsExpr = new JRDesignExpression();
-        dsExpr.setText("$P{" + field.name() + "}");
-        datasetRun.setDataSourceExpression(dsExpr);
+        JRDesignExpression dataSourceExpression = new JRDesignExpression();
+        dataSourceExpression.setText("$P{" + field.name() + "}");
+        datasetRun.setDataSourceExpression(dataSourceExpression);
         return datasetRun;
     }
 
@@ -295,13 +299,13 @@ public class JrxmlTemplateInjector {
     }
 
     private boolean subreportBandExists(JRDesignSection section, String prefix) {
-        String expectedExpr = "$P{" + prefix + "Report}";
+        String expectedExpression = "$P{" + prefix + "Report}";
         return Arrays.stream(section.getBands())
                      .flatMap(b -> Arrays.stream(b.getElements()))
                      .filter(e -> e instanceof JRDesignSubreport)
                      .map(e -> (JRDesignSubreport) e)
                      .anyMatch(sr -> sr.getExpression() != null
-                                     && expectedExpr.equals(sr.getExpression().getText()));
+                                     && expectedExpression.equals(sr.getExpression().getText()));
     }
 
     private JRDesignBand createSubreportBand(String prefix, int columnWidth) {
@@ -317,17 +321,17 @@ public class JrxmlTemplateInjector {
         subreport.setPositionType(PositionTypeEnum.FLOAT);
         subreport.setRemoveLineWhenBlank(true);
 
-        JRDesignExpression paramsExpr = new JRDesignExpression();
-        paramsExpr.setText("$P{" + prefix + "MapParameter}");
-        subreport.setParametersMapExpression(paramsExpr);
+        JRDesignExpression parametersMapExpression = new JRDesignExpression();
+        parametersMapExpression.setText("$P{" + prefix + "MapParameter}");
+        subreport.setParametersMapExpression(parametersMapExpression);
 
-        JRDesignExpression dsExpr = new JRDesignExpression();
-        dsExpr.setText("new net.sf.jasperreports.engine.JREmptyDataSource()");
-        subreport.setDataSourceExpression(dsExpr);
+        JRDesignExpression dataSourceExpression = new JRDesignExpression();
+        dataSourceExpression.setText("new net.sf.jasperreports.engine.JREmptyDataSource()");
+        subreport.setDataSourceExpression(dataSourceExpression);
 
-        JRDesignExpression expr = new JRDesignExpression();
-        expr.setText("$P{" + prefix + "Report}");
-        subreport.setExpression(expr);
+        JRDesignExpression expression = new JRDesignExpression();
+        expression.setText("$P{" + prefix + "Report}");
+        subreport.setExpression(expression);
 
         band.addElement(subreport);
         return band;
@@ -366,9 +370,9 @@ public class JrxmlTemplateInjector {
     private JRDesignComponentElement createSubreportListComponent(JrxmlParameter field, int width) {
         JRDesignDatasetRun datasetRun = new JRDesignDatasetRun();
         datasetRun.setDatasetName(field.dataset().name());
-        JRDesignExpression dsExpr = new JRDesignExpression();
-        dsExpr.setText("$P{" + field.name() + "}");
-        datasetRun.setDataSourceExpression(dsExpr);
+        JRDesignExpression dataSourceExpression = new JRDesignExpression();
+        dataSourceExpression.setText("$P{" + field.name() + "}");
+        datasetRun.setDataSourceExpression(dataSourceExpression);
 
         JRDesignSubreport subreport = new JRDesignSubreport(null);
         subreport.setX(0);
@@ -378,17 +382,17 @@ public class JrxmlTemplateInjector {
         subreport.setPositionType(PositionTypeEnum.FLOAT);
         subreport.setRemoveLineWhenBlank(true);
 
-        JRDesignExpression paramsExpr = new JRDesignExpression();
-        paramsExpr.setText("$F{" + JasperModularDataFiller.SUBREPORT_PARAMS_FIELD + "}");
-        subreport.setParametersMapExpression(paramsExpr);
+        JRDesignExpression parametersMapExpression = new JRDesignExpression();
+        parametersMapExpression.setText("$F{" + JasperModularDataFiller.SUBREPORT_PARAMS_FIELD + "}");
+        subreport.setParametersMapExpression(parametersMapExpression);
 
-        JRDesignExpression emptyDs = new JRDesignExpression();
-        emptyDs.setText("new net.sf.jasperreports.engine.JREmptyDataSource()");
-        subreport.setDataSourceExpression(emptyDs);
+        JRDesignExpression emptyDataSourceExpression = new JRDesignExpression();
+        emptyDataSourceExpression.setText("new net.sf.jasperreports.engine.JREmptyDataSource()");
+        subreport.setDataSourceExpression(emptyDataSourceExpression);
 
-        JRDesignExpression reportExpr = new JRDesignExpression();
-        reportExpr.setText("$F{" + JasperModularDataFiller.SUBREPORT_REPORT_FIELD + "}");
-        subreport.setExpression(reportExpr);
+        JRDesignExpression reportExpression = new JRDesignExpression();
+        reportExpression.setText("$F{" + JasperModularDataFiller.SUBREPORT_REPORT_FIELD + "}");
+        subreport.setExpression(reportExpression);
 
         DesignListContents contents = new DesignListContents();
         contents.setHeight(SUBREPORT_HEIGHT);
@@ -405,6 +409,8 @@ public class JrxmlTemplateInjector {
         element.setWidth(width);
         element.setHeight(SUBREPORT_HEIGHT);
         element.setComponent(listComponent);
+        element.setPositionType(PositionTypeEnum.FLOAT);
+        element.setRemoveLineWhenBlank(true);
         applyComponentKeyIfNeeded(element, "list");
         return element;
     }
@@ -412,14 +418,13 @@ public class JrxmlTemplateInjector {
     private void applyComponentKeyIfNeeded(JRDesignComponentElement element,
                                            String componentName) {
         try {
-            Class<?> keyClass = Class.forName(
-                    "net.sf.jasperreports.engine.component.ComponentKey");
-            Constructor<?> ctor = keyClass.getConstructor(
-                    String.class, String.class, String.class);
-            Object key = ctor.newInstance(
-                    "http://jasperreports.sourceforge.net/jasperreports/components",
-                    "jr",
-                    componentName);
+            Class<?> keyClass = Class.forName("net.sf.jasperreports.engine.component.ComponentKey");
+            Constructor<?> constructor = keyClass.getConstructor(String.class,
+                                                                 String.class,
+                                                                 String.class);
+            Object key = constructor.newInstance("http://jasperreports.sourceforge.net/jasperreports/components",
+                                                 "jr",
+                                                 componentName);
             Method setter = element.getClass().getMethod("setComponentKey", keyClass);
             setter.invoke(element, key);
         } catch (ClassNotFoundException ignored) {

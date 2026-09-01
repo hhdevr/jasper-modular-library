@@ -55,9 +55,9 @@ public interface JasperModularCompiler {
             return root.templatePath();
         }
 
-        JasperSubreport sub = getClass().getAnnotation(JasperSubreport.class);
-        if (sub != null) {
-            return sub.templatePath();
+        JasperSubreport subreport = getClass().getAnnotation(JasperSubreport.class);
+        if (subreport != null) {
+            return subreport.templatePath();
         }
 
         throw new JasperModularException(

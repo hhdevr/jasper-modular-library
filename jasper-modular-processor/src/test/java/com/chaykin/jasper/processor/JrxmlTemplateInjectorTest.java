@@ -1,5 +1,7 @@
 package com.chaykin.jasper.processor;
 
+import net.sf.jasperreports.engine.JRComponentElement;
+import net.sf.jasperreports.engine.JRElement;
 import net.sf.jasperreports.engine.JRField;
 import net.sf.jasperreports.engine.design.JasperDesign;
 import net.sf.jasperreports.engine.xml.JRXmlLoader;
@@ -92,10 +94,6 @@ class JrxmlTemplateInjectorTest {
             return notes.stream().anyMatch(n -> n.contains(substring));
         }
 
-        long noteCount(String substring) {
-            return notes.stream().filter(n -> n.contains(substring)).count();
-        }
-
         void reset() {
             notes.clear();
             errors.clear();
@@ -145,6 +143,13 @@ class JrxmlTemplateInjectorTest {
                                  List<com.chaykin.jasper.processor.model.JrxmlParameter> params)
             throws Exception {
         return injectToBytes(JRXmlLoader.load(template), params);
+    }
+
+    private List<JRElement> detailComponentElements(JasperDesign design) {
+        return Arrays.stream(design.getDetailSection().getBands())
+                     .flatMap(b -> Arrays.stream(b.getElements()))
+                     .filter(JRComponentElement.class::isInstance)
+                     .toList();
     }
 
     @Nested
@@ -288,6 +293,21 @@ class JrxmlTemplateInjectorTest {
         }
 
         @Test
+        @DisplayName("list component collapses when blank instead of leaving an empty band")
+        void listComponent_removesLineWhenBlank() throws Exception {
+            // given
+            var params = collectionParam();
+
+            // when
+            JasperDesign design = inject(blankTemplate(), params);
+
+            // then
+            assertThat(detailComponentElements(design))
+                    .isNotEmpty()
+                    .allMatch(JRElement::isRemoveLineWhenBlank);
+        }
+
+        @Test
         @DisplayName("list component with custom column width is injected correctly")
         void listComponent_withCustomColumnWidth_isInjected() throws Exception {
             // given
@@ -337,6 +357,21 @@ class JrxmlTemplateInjectorTest {
                                         + TABLE_PARAM_NAME)).isTrue();
             assertThat(messager.hasNote("Injected table component: "
                                         + TABLE_PARAM_NAME)).isFalse();
+        }
+
+        @Test
+        @DisplayName("table component collapses when blank instead of leaving an empty band")
+        void tableComponent_removesLineWhenBlank() throws Exception {
+            // given
+            var params = tableParam();
+
+            // when
+            JasperDesign design = inject(blankTemplate(), params);
+
+            // then
+            assertThat(detailComponentElements(design))
+                    .isNotEmpty()
+                    .allMatch(JRElement::isRemoveLineWhenBlank);
         }
 
         @Test
@@ -502,6 +537,21 @@ class JrxmlTemplateInjectorTest {
                     .contains("$P{" + SUBREPORT_LIST_DS_PARAM + "}")
                     .contains("$F{params}")
                     .contains("$F{report}");
+        }
+
+        @Test
+        @DisplayName("subreport list component collapses when blank instead of leaving an empty band")
+        void subreportList_removesLineWhenBlank() throws Exception {
+            // given
+            var params = subreportListParams();
+
+            // when
+            JasperDesign design = inject(blankTemplate(), params);
+
+            // then
+            assertThat(detailComponentElements(design))
+                    .isNotEmpty()
+                    .allMatch(JRElement::isRemoveLineWhenBlank);
         }
 
         @Test

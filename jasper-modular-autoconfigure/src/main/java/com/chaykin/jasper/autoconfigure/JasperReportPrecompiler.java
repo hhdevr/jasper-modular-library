@@ -87,21 +87,21 @@ public class JasperReportPrecompiler implements ApplicationRunner {
 
         List<String> paths = new ArrayList<>();
 
-        for (BeanDefinition bd: scanner.findCandidateComponents(properties.getBasePackage())) {
+        for (BeanDefinition beanDefinition: scanner.findCandidateComponents(properties.getBasePackage())) {
             try {
-                Class<?> clazz = Class.forName(bd.getBeanClassName());
+                Class<?> clazz = Class.forName(beanDefinition.getBeanClassName());
 
                 JasperModularReport root = clazz.getAnnotation(JasperModularReport.class);
                 if (root != null && !root.templatePath().isEmpty()) {
                     paths.add(root.templatePath());
                 }
 
-                JasperSubreport sub = clazz.getAnnotation(JasperSubreport.class);
-                if (sub != null && !sub.templatePath().isEmpty()) {
-                    paths.add(sub.templatePath());
+                JasperSubreport subreport = clazz.getAnnotation(JasperSubreport.class);
+                if (subreport != null && !subreport.templatePath().isEmpty()) {
+                    paths.add(subreport.templatePath());
                 }
             } catch (ClassNotFoundException e) {
-                log.error("Cannot load class: {}", bd.getBeanClassName());
+                log.error("Cannot load class: {}", beanDefinition.getBeanClassName());
             }
         }
         return paths;

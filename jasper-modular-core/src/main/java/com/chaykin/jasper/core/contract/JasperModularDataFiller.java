@@ -4,7 +4,6 @@ import com.chaykin.jasper.core.annotation.JasperIgnore;
 import com.chaykin.jasper.core.annotation.JasperSubreport;
 import com.chaykin.jasper.core.exception.JasperModularException;
 import com.chaykin.jasper.core.model.SubreportModule;
-import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
 import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
 
@@ -27,7 +26,7 @@ public class JasperModularDataFiller {
     /** JRXML field name carrying each element's parameter map inside a generated subreport list. */
     public static final String SUBREPORT_PARAMS_FIELD = "params";
 
-    /** JRXML field name carrying the shared compiled report inside a generated subreport list. */
+    /** JRXML field name carrying each element's own compiled report inside a generated subreport list. */
     public static final String SUBREPORT_REPORT_FIELD = "report";
 
     /**
@@ -79,12 +78,12 @@ public class JasperModularDataFiller {
                 return;
             }
 
-            JasperSubreport ann = value.getClass().getAnnotation(JasperSubreport.class);
-            if (ann != null) {
+            JasperSubreport annotation = value.getClass().getAnnotation(JasperSubreport.class);
+            if (annotation != null) {
                 if (value instanceof SubreportModule module && module.isEmpty()) {
                     return;
                 }
-                putSubreport(field, (JasperModularCompiler) value, ann, params, visited);
+                putSubreport((JasperModularCompiler) value, annotation, params, visited);
                 return;
             }
 
@@ -111,20 +110,23 @@ public class JasperModularDataFiller {
     }
 
     private Class<?> collectionElementType(Field field) {
-        if (field.getGenericType() instanceof ParameterizedType pt
-            && pt.getActualTypeArguments().length > 0
-            && pt.getActualTypeArguments()[0] instanceof Class<?> elementType) {
+        if (field.getGenericType() instanceof ParameterizedType parameterizedType
+            && parameterizedType.getActualTypeArguments().length > 0
+            && parameterizedType.getActualTypeArguments()[0] instanceof Class<?> elementType) {
             return elementType;
         }
         return null;
     }
 
-    private void putSubreport(Field field, JasperModularCompiler module,
-                              JasperSubreport ann, Map<String, Object> params,
+    private void putSubreport(JasperModularCompiler module,
+                              JasperSubreport annotation,
+                              Map<String, Object> params,
                               Set<Class<?>> visited) {
-        String prefix = ann.prefix().isEmpty()
+
+        String prefix = annotation.prefix().isEmpty()
                         ? module.getClass().getSimpleName()
-                        : ann.prefix();
+                        : annotation.prefix();
+
         Map<String, Object> childParams = new HashMap<>();
         ((JasperModularDataFiller) module).fillMapParameters(childParams, visited);
         params.put(prefix + "Report", module.compileReport());
@@ -140,24 +142,20 @@ public class JasperModularDataFiller {
             return;
         }
 
-        JasperSubreport ann = elementType.getAnnotation(JasperSubreport.class);
-        String prefix = ann.prefix().isEmpty() ? elementType.getSimpleName() : ann.prefix();
+        JasperSubreport annotation = elementType.getAnnotation(JasperSubreport.class);
+        String prefix = annotation.prefix().isEmpty() ? elementType.getSimpleName() : annotation.prefix();
 
-        JasperReport compiled = null;
         List<Map<String, ?>> rows = new ArrayList<>();
         for (Object element: data) {
             if (element instanceof SubreportModule module && module.isEmpty()) {
                 continue;
-            }
-            if (compiled == null) {
-                compiled = ((JasperModularCompiler) element).compileReport();
             }
             Map<String, Object> childParams = new HashMap<>();
             ((JasperModularDataFiller) element).fillMapParameters(childParams, visited);
             rows.add(Map.of(SUBREPORT_PARAMS_FIELD,
                             childParams,
                             SUBREPORT_REPORT_FIELD,
-                            compiled));
+                            ((JasperModularCompiler) element).compileReport()));
         }
         if (rows.isEmpty()) {
             return;

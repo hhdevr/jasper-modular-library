@@ -40,12 +40,14 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -134,7 +136,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         }
     }
 
-    private void generate(TypeElement classElement) throws Exception {
+    private void generate(TypeElement classElement) throws IOException, JRException {
         GenerationMode mode = resolveMode(classElement);
 
         if (mode == GenerationMode.NONE) {
@@ -161,7 +163,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
     private void writeOutput(String templatePath,
                              JasperDesign design,
-                             List<JrxmlParameter> fields) throws Exception {
+                             List<JrxmlParameter> fields) throws IOException, JRException {
         FileObject output = filer.createResource(StandardLocation.SOURCE_OUTPUT,
                                                  "",
                                                  templatePath.replaceFirst("^/", ""));
@@ -172,26 +174,38 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     }
 
     /**
-     * Loads an existing JRXML from the classpath, or falls back to a blank design.
-     * Reads via the processor classloader because Maven copies {@code src/main/resources}
-     * to {@code target/classes} before compilation.
+     * Loads the existing JRXML via {@link #findExistingTemplate}, or falls back to a blank
+     * design with a warning.
      */
     private JasperDesign resolveDesign(String templatePath,
-                                       TypeElement classElement) throws Exception {
-        String path = templatePath.replaceFirst("^/", "");
-        try (InputStream stream = getClass().getClassLoader().getResourceAsStream(path)) {
+                                       TypeElement classElement) throws IOException, JRException {
+        try (InputStream stream = findExistingTemplate(templatePath)) {
             if (stream != null) {
                 messager.printMessage(Diagnostic.Kind.NOTE,
                                       "Injecting into existing: " + templatePath);
                 return JRXmlLoader.load(stream);
             }
         }
-        messager.printMessage(Diagnostic.Kind.NOTE,
-                              "Not found - creating from template: " + templatePath);
+        messager.printMessage(Diagnostic.Kind.WARNING,
+                              "Existing template not found - generating a blank skeleton: "
+                              + templatePath
+                              + ". If the template exists, the build did not expose it to the "
+                              + "annotation processor; do not copy the skeleton over your design.");
         return createEmptyDesign(classElement);
     }
 
-    private JasperDesign createEmptyDesign(TypeElement classElement) throws JRException {
+    /** Looks for the template in the compiled-classes output first, then on the processor classpath. */
+    private InputStream findExistingTemplate(String templatePath) {
+        String path = templatePath.replaceFirst("^/", "");
+        try {
+            return filer.getResource(StandardLocation.CLASS_OUTPUT, "", path).openInputStream();
+        } catch (IOException | RuntimeException ignored) {
+            // not present in class output - fall back to the processor classpath
+        }
+        return getClass().getClassLoader().getResourceAsStream(path);
+    }
+
+    private JasperDesign createEmptyDesign(TypeElement classElement) {
         boolean isSubreport = classElement.getAnnotation(JasperSubreport.class) != null;
         boolean isLandscape = resolveOrientation(classElement) == PageOrientation.LANDSCAPE;
 
@@ -256,18 +270,18 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                          .filter(f -> f.getAnnotation(JasperIgnore.class) == null)
                          .forEach(action);
 
-            TypeMirror superclass = current.getSuperclass();
-            current = superclass != null
-                      ? (TypeElement) typeUtils.asElement(superclass)
-                      : null;
+            current = (TypeElement) typeUtils.asElement(current.getSuperclass());
         }
     }
 
     private void describeField(VariableElement field, List<JrxmlParameter> result) {
         TypeElement fieldClass = (TypeElement) typeUtils.asElement(field.asType());
 
-        if (isSubreport(fieldClass)) {
-            result.addAll(describeSubreportParameters(fieldClass));
+        JasperSubreport subreportAnnotation = fieldClass != null
+                                              ? fieldClass.getAnnotation(JasperSubreport.class)
+                                              : null;
+        if (subreportAnnotation != null) {
+            result.addAll(describeSubreportParameters(fieldClass, subreportAnnotation));
             return;
         }
 
@@ -281,15 +295,11 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                                       null));
     }
 
-    private boolean isSubreport(TypeElement fieldClass) {
-        return fieldClass != null && fieldClass.getAnnotation(JasperSubreport.class) != null;
-    }
-
-    private List<JrxmlParameter> describeSubreportParameters(TypeElement fieldClass) {
-        JasperSubreport ann = fieldClass.getAnnotation(JasperSubreport.class);
-        String prefix = ann.prefix().isEmpty()
+    private List<JrxmlParameter> describeSubreportParameters(TypeElement fieldClass,
+                                                             JasperSubreport annotation) {
+        String prefix = annotation.prefix().isEmpty()
                         ? fieldClass.getSimpleName().toString()
-                        : ann.prefix();
+                        : annotation.prefix();
         return List.of(
                 new JrxmlParameter(prefix + "Report",
                                    "net.sf.jasperreports.engine.JasperReport",
@@ -309,8 +319,19 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
         TypeElement elementClass = (TypeElement) typeUtils.asElement(elementType);
 
-        if (elementClass != null && elementClass.getAnnotation(JasperSubreport.class) != null) {
-            describeSubreportListField(elementClass, result);
+        JasperSubreport subreportAnnotation = elementClass != null
+                                              ? elementClass.getAnnotation(JasperSubreport.class)
+                                              : null;
+        if (subreportAnnotation != null) {
+            describeSubreportListField(elementClass, subreportAnnotation, result);
+            return;
+        }
+
+        if (isModularDataFillerSubtype(elementType)) {
+            messager.printMessage(Diagnostic.Kind.ERROR,
+                                  "Collection elements that are modular reports must be annotated "
+                                  + "with @JasperSubreport. Field: " + field.getSimpleName(),
+                                  field);
             return;
         }
 
@@ -337,11 +358,12 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     /**
      * Describes a collection of {@link JasperSubreport} modules as a repeating subreport.
      */
-    private void describeSubreportListField(TypeElement elementClass, List<JrxmlParameter> result) {
-        JasperSubreport ann = elementClass.getAnnotation(JasperSubreport.class);
-        String prefix = ann.prefix().isEmpty()
+    private void describeSubreportListField(TypeElement elementClass,
+                                            JasperSubreport annotation,
+                                            List<JrxmlParameter> result) {
+        String prefix = annotation.prefix().isEmpty()
                         ? elementClass.getSimpleName().toString()
-                        : ann.prefix();
+                        : annotation.prefix();
 
         JrxmlDataset dataset = new JrxmlDataset(
                 prefix + "Dataset",
@@ -380,21 +402,21 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         JasperModularReport root = classElement.getAnnotation(JasperModularReport.class);
         return root != null
                ? root.mode()
-               : classElement.getAnnotation(JasperSubreport.class).mode();
+               : Objects.requireNonNull(classElement.getAnnotation(JasperSubreport.class)).mode();
     }
 
     private String resolveTemplatePath(TypeElement classElement) {
         JasperModularReport root = classElement.getAnnotation(JasperModularReport.class);
         return root != null
                ? root.templatePath()
-               : classElement.getAnnotation(JasperSubreport.class).templatePath();
+               : Objects.requireNonNull(classElement.getAnnotation(JasperSubreport.class)).templatePath();
     }
 
     private PageOrientation resolveOrientation(TypeElement classElement) {
         JasperModularReport root = classElement.getAnnotation(JasperModularReport.class);
         return root != null
                ? root.orientation()
-               : classElement.getAnnotation(JasperSubreport.class).orientation();
+               : Objects.requireNonNull(classElement.getAnnotation(JasperSubreport.class)).orientation();
     }
 
     private boolean isCollection(TypeMirror type) {
@@ -409,6 +431,13 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         }
         String name = element.getQualifiedName().toString();
         return SIMPLE_TYPES.contains(name) || name.startsWith("java.time.");
+    }
+
+    private boolean isModularDataFillerSubtype(TypeMirror type) {
+        TypeElement filler = elementUtils.getTypeElement(
+                "com.chaykin.jasper.core.contract.JasperModularDataFiller");
+        return filler != null && typeUtils.isAssignable(typeUtils.erasure(type),
+                                                        typeUtils.erasure(filler.asType()));
     }
 
     private boolean isJasperModularDataFiller(TypeElement element) {

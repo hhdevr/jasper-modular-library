@@ -13,6 +13,7 @@ import java.util.List;
  * Test fixtures for {@link JasperModularDataFillerTest}.
  * Contains minimal report and subreport classes that simulate real-world usage.
  */
+@SuppressWarnings("unused") // fixture fields are read reflectively by JasperModularDataFiller
 final class JasperModularDataFillerFixture {
 
     private JasperModularDataFillerFixture() {}
@@ -245,6 +246,60 @@ final class JasperModularDataFillerFixture {
         List<ToggleModule> modules;
 
         ToggleListReport(List<ToggleModule> modules) {this.modules = modules;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Rich")
+    static class RichModule extends SubreportModule {
+
+        String title;
+        List<LineItem> items;
+
+        RichModule(String title, List<LineItem> items) {
+            this.title = title;
+            this.items = items;
+        }
+
+        @Override
+        public boolean isEmpty() {return false;}
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
+    static class RichListReport extends ModularReport {
+
+        List<RichModule> modules;
+
+        RichListReport(List<RichModule> modules) {this.modules = modules;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Mixed")
+    abstract static class MixedBaseModule extends SubreportModule {
+
+        @Override
+        public boolean isEmpty() {return false;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Mixed")
+    static class MixedItemsModule extends MixedBaseModule {
+
+        String title;
+
+        MixedItemsModule(String title) {this.title = title;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/other.jrxml", prefix = "Mixed")
+    static class MixedOtherModule extends MixedBaseModule {
+
+        String note;
+
+        MixedOtherModule(String note) {this.note = note;}
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
+    static class MixedListReport extends ModularReport {
+
+        List<MixedBaseModule> modules;
+
+        MixedListReport(List<MixedBaseModule> modules) {this.modules = modules;}
     }
 
 }
