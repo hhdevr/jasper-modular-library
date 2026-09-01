@@ -147,6 +147,18 @@ final class JasperModularDataFillerFixture {
 
     }
 
+    record RecordItem(String name) {
+
+    }
+
+    @JasperModularReport(templatePath = "/reports/collection.jrxml")
+    static class RecordListReport extends ModularReport {
+
+        List<RecordItem> items;
+
+        RecordListReport(List<RecordItem> items) {this.items = items;}
+    }
+
     @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
     static class SubreportListReport extends ModularReport {
 

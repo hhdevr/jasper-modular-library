@@ -121,6 +121,12 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     private void processAnnotated(Set<? extends Element> elements) {
         for (Element element: elements) {
             if (element.getKind() != ElementKind.CLASS) {
+                messager.printMessage(Diagnostic.Kind.ERROR,
+                                      "@JasperModularReport/@JasperSubreport is not supported on "
+                                      + element.getKind().toString().toLowerCase()
+                                      + " - only classes extending ModularReport/SubreportModule"
+                                      + " are supported",
+                                      element);
                 continue;
             }
 
@@ -194,7 +200,9 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         return createEmptyDesign(classElement);
     }
 
-    /** Looks for the template in the compiled-classes output first, then on the processor classpath. */
+    /**
+     * Looks for the template in the compiled-classes output first, then on the processor classpath.
+     */
     private InputStream findExistingTemplate(String templatePath) {
         String path = templatePath.replaceFirst("^/", "");
         try {
@@ -318,6 +326,15 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         }
 
         TypeElement elementClass = (TypeElement) typeUtils.asElement(elementType);
+
+        if (elementClass != null && elementClass.getKind() == ElementKind.RECORD) {
+            messager.printMessage(Diagnostic.Kind.ERROR,
+                                  "Records are not supported as collection elements - JasperReports"
+                                  + " bean data sources require JavaBean getters. Field: "
+                                  + field.getSimpleName(),
+                                  field);
+            return;
+        }
 
         JasperSubreport subreportAnnotation = elementClass != null
                                               ? elementClass.getAnnotation(JasperSubreport.class)

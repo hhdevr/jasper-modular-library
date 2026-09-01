@@ -88,17 +88,7 @@ public class JasperModularDataFiller {
             }
 
             if (Collection.class.isAssignableFrom(field.getType())) {
-                Class<?> elementType = collectionElementType(field);
-                if (elementType != null && elementType.isAnnotationPresent(JasperSubreport.class)) {
-                    putSubreportList((Collection<?>) value, elementType, params, visited);
-                } else if (elementType != null
-                           && JasperModularDataFiller.class.isAssignableFrom(elementType)) {
-                    throw new JasperModularException(
-                            "Collection elements that are modular reports must be annotated "
-                            + "with @JasperSubreport. Field: " + field.getName());
-                } else {
-                    putCollection(field.getName(), (Collection<?>) value, params);
-                }
+                putCollectionField(field, (Collection<?>) value, params, visited);
             } else {
                 putParameter(field.getName(), value, params);
             }
@@ -107,6 +97,31 @@ public class JasperModularDataFiller {
             throw new JasperModularException(
                     "Failed to access field: " + field.getName(), e);
         }
+    }
+
+    private void putCollectionField(Field field, Collection<?> data,
+                                    Map<String, Object> params,
+                                    Set<Class<?>> visited) {
+        Class<?> elementType = collectionElementType(field);
+        if (elementType == null) {
+            putCollection(field.getName(), data, params);
+            return;
+        }
+        if (elementType.isRecord()) {
+            throw new JasperModularException(
+                    "Records are not supported as collection elements - JasperReports bean "
+                    + "data sources require JavaBean getters. Field: " + field.getName());
+        }
+        if (elementType.isAnnotationPresent(JasperSubreport.class)) {
+            putSubreportList(data, elementType, params, visited);
+            return;
+        }
+        if (JasperModularDataFiller.class.isAssignableFrom(elementType)) {
+            throw new JasperModularException(
+                    "Collection elements that are modular reports must be annotated "
+                    + "with @JasperSubreport. Field: " + field.getName());
+        }
+        putCollection(field.getName(), data, params);
     }
 
     private Class<?> collectionElementType(Field field) {

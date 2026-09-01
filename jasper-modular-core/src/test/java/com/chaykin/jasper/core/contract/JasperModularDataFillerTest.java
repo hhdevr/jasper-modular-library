@@ -8,20 +8,22 @@ import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.Financial
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.IgnoredFieldReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ItemsModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.LineItem;
-import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedReport;
-import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MultiSubreportReport;
-import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NoPrefixReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedItemsModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedOtherModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MultiSubreportReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NoPrefixReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullSubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullableReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.OtherModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RecordItem;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RecordListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RichListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RichModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ScalarReport;
-import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.StaticFieldReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SelfNodeModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.StaticFieldReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SummaryModule;
@@ -157,6 +159,18 @@ class JasperModularDataFillerTest {
 
             // then
             assertThat(params).doesNotContainKey("items");
+        }
+
+        @Test
+        @DisplayName("List of records throws - bean data sources cannot read record accessors")
+        void listOfRecords_throwsException() {
+            // given
+            var report = new RecordListReport(List.of(new RecordItem("x")));
+
+            // when / then
+            assertThatThrownBy(report::fillMapParameters)
+                    .isInstanceOf(JasperModularException.class)
+                    .hasMessageContaining("Records are not supported as collection elements");
         }
 
     }

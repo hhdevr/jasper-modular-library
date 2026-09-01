@@ -37,6 +37,8 @@ public class JasperReportPrecompiler implements ApplicationRunner {
      */
     @Override
     public void run(ApplicationArguments args) {
+        JasperModularCompiler.CACHE.clear();
+
         if (!properties.isPrecompileEnabled()) {
             log.info("JasperReport precompilation is disabled");
             return;
