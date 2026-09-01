@@ -75,8 +75,7 @@ public class JrxmlTemplateInjector {
             throws JRException {
         for (JrxmlParameter field: fields) {
             if (design.getParametersMap().containsKey(field.name())) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Parameter already exists - skipping: " + field.name());
+                note("Parameter already exists - skipping: " + field.name());
                 continue;
             }
             JRDesignParameter param = new JRDesignParameter();
@@ -94,8 +93,7 @@ public class JrxmlTemplateInjector {
             }
 
             if (design.getDatasetMap().containsKey(field.dataset().name())) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Dataset already exists - skipping: "
+                note("Dataset already exists - skipping: "
                                       + field.dataset().name());
                 continue;
             }
@@ -126,8 +124,7 @@ public class JrxmlTemplateInjector {
 
         for (JrxmlParameter field: collectionFields) {
             if (collectionComponentExists(detailSection, field.dataset().name())) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "List component already exists - skipping: "
+                note("List component already exists - skipping: "
                                       + field.name());
                 continue;
             }
@@ -138,12 +135,10 @@ public class JrxmlTemplateInjector {
 
             if (field.dataset().componentType() == CollectionComponentType.TABLE) {
                 band.addElement(createTableComponent(field));
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Injected table component: " + field.name());
+                note("Injected table component: " + field.name());
             } else {
                 band.addElement(createListComponent(field));
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Injected list component: " + field.name());
+                note("Injected list component: " + field.name());
             }
 
             detailSection.addBand(band);
@@ -288,13 +283,11 @@ public class JrxmlTemplateInjector {
 
         for (String prefix: subreportPrefixes) {
             if (subreportBandExists(detailSection, prefix)) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Subreport band already exists - skipping: " + prefix);
+                note("Subreport band already exists - skipping: " + prefix);
                 continue;
             }
             detailSection.addBand(createSubreportBand(prefix, columnWidth));
-            messager.printMessage(Diagnostic.Kind.NOTE,
-                                  "Injected subreport band: " + prefix);
+            note("Injected subreport band: " + prefix);
         }
     }
 
@@ -351,8 +344,7 @@ public class JrxmlTemplateInjector {
 
         for (JrxmlParameter field: listFields) {
             if (collectionComponentExists(detailSection, field.dataset().name())) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Subreport list already exists - skipping: " + field.name());
+                note("Subreport list already exists - skipping: " + field.name());
                 continue;
             }
 
@@ -362,8 +354,7 @@ public class JrxmlTemplateInjector {
             band.addElement(createSubreportListComponent(field, columnWidth));
             detailSection.addBand(band);
 
-            messager.printMessage(Diagnostic.Kind.NOTE,
-                                  "Injected subreport list: " + field.subreportPrefix());
+            note("Injected subreport list: " + field.subreportPrefix());
         }
     }
 
@@ -430,9 +421,16 @@ public class JrxmlTemplateInjector {
         } catch (ClassNotFoundException ignored) {
             // JR7: ComponentKey removed, namespace inferred automatically - expected path.
         } catch (ReflectiveOperationException e) {
-            messager.printMessage(Diagnostic.Kind.WARNING,
-                                  "Could not set ComponentKey for " + componentName
+            warn("Could not set ComponentKey for " + componentName
                                   + ": " + e.getMessage());
         }
+    }
+
+    private void note(String message) {
+        messager.printMessage(Diagnostic.Kind.NOTE, message);
+    }
+
+    private void warn(String message) {
+        messager.printMessage(Diagnostic.Kind.WARNING, message);
     }
 }

@@ -121,8 +121,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     private void processAnnotated(Set<? extends Element> elements) {
         for (Element element: elements) {
             if (element.getKind() != ElementKind.CLASS) {
-                messager.printMessage(Diagnostic.Kind.ERROR,
-                                      "@JasperModularReport/@JasperSubreport is not supported on "
+                error("@JasperModularReport/@JasperSubreport is not supported on "
                                       + element.getKind().toString().toLowerCase()
                                       + " - only classes extending ModularReport/SubreportModule"
                                       + " are supported",
@@ -134,8 +133,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             try {
                 generate(classElement);
             } catch (Exception e) {
-                messager.printMessage(Diagnostic.Kind.ERROR,
-                                      "Failed to generate JRXML for "
+                error("Failed to generate JRXML for "
                                       + classElement.getSimpleName() + ": " + e,
                                       classElement);
             }
@@ -146,16 +144,14 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         GenerationMode mode = resolveMode(classElement);
 
         if (mode == GenerationMode.NONE) {
-            messager.printMessage(Diagnostic.Kind.NOTE,
-                                  "Skipping generation for: " + classElement.getSimpleName());
+            note("Skipping generation for: " + classElement.getSimpleName());
             return;
         }
 
         String templatePath = resolveTemplatePath(classElement);
         List<JrxmlParameter> fields = describeFields(classElement);
 
-        messager.printMessage(Diagnostic.Kind.NOTE,
-                              "Generating JRXML [" + mode + "] for: "
+        note("Generating JRXML [" + mode + "] for: "
                               + classElement.getSimpleName() + " -> " + templatePath);
 
         JasperDesign design = switch (mode) {
@@ -187,13 +183,11 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                                        TypeElement classElement) throws IOException, JRException {
         try (InputStream stream = findExistingTemplate(templatePath)) {
             if (stream != null) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Injecting into existing: " + templatePath);
+                note("Injecting into existing: " + templatePath);
                 return JRXmlLoader.load(stream);
             }
         }
-        messager.printMessage(Diagnostic.Kind.WARNING,
-                              "Existing template not found - generating a blank skeleton: "
+        warn("Existing template not found - generating a blank skeleton: "
                               + templatePath
                               + ". If the template exists, the build did not expose it to the "
                               + "annotation processor; do not copy the skeleton over your design.");
@@ -328,8 +322,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         TypeElement elementClass = (TypeElement) typeUtils.asElement(elementType);
 
         if (elementClass != null && elementClass.getKind() == ElementKind.RECORD) {
-            messager.printMessage(Diagnostic.Kind.ERROR,
-                                  "Records are not supported as collection elements - JasperReports"
+            error("Records are not supported as collection elements - JasperReports"
                                   + " bean data sources require JavaBean getters. Field: "
                                   + field.getSimpleName(),
                                   field);
@@ -345,8 +338,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         }
 
         if (isModularDataFillerSubtype(elementType)) {
-            messager.printMessage(Diagnostic.Kind.ERROR,
-                                  "Collection elements that are modular reports must be annotated "
+            error("Collection elements that are modular reports must be annotated "
                                   + "with @JasperSubreport. Field: " + field.getSimpleName(),
                                   field);
             return;
@@ -491,5 +483,17 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                             .toString();
         }
         return typeUtils.erasure(typeMirror).toString();
+    }
+
+    private void note(String message) {
+        messager.printMessage(Diagnostic.Kind.NOTE, message);
+    }
+
+    private void warn(String message) {
+        messager.printMessage(Diagnostic.Kind.WARNING, message);
+    }
+
+    private void error(String message, Element element) {
+        messager.printMessage(Diagnostic.Kind.ERROR, message, element);
     }
 }
