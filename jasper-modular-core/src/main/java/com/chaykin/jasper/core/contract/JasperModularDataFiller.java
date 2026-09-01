@@ -67,7 +67,7 @@ public class JasperModularDataFiller {
     }
 
     private void processField(Field field, Map<String, Object> params, Set<Class<?>> visited) {
-        if (field.isAnnotationPresent(JasperIgnore.class)) {
+        if (field.isSynthetic() || field.isAnnotationPresent(JasperIgnore.class)) {
             return;
         }
 

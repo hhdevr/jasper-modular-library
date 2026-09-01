@@ -20,6 +20,7 @@ import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.OtherModu
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RichListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RichModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ScalarReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.StaticFieldReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SelfNodeModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportReport;
@@ -76,6 +77,21 @@ class JasperModularDataFillerTest {
             // then
             assertThat(params).containsKey("present")
                               .doesNotContainKey("absent");
+        }
+
+        @Test
+        @DisplayName("static fields are placed into the map unless annotated with @JasperIgnore")
+        void staticField_isAddedToMapUnlessIgnored() {
+            // given
+            var report = new StaticFieldReport();
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            assertThat(params).containsEntry("STATIC_CONSTANT", "shared")
+                              .containsKey("instanceField")
+                              .doesNotContainKey("IGNORED_CONSTANT");
         }
     }
 

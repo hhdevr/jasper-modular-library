@@ -65,6 +65,17 @@ final class JasperModularDataFillerFixture {
         }
     }
 
+    @JasperModularReport(templatePath = "/reports/static_fields.jrxml")
+    static class StaticFieldReport extends ModularReport {
+
+        static final String STATIC_CONSTANT = "shared";
+
+        @JasperIgnore
+        static final String IGNORED_CONSTANT = "hidden";
+
+        String instanceField = "kept";
+    }
+
     @JasperModularReport(templatePath = "/reports/nullable.jrxml")
     static class NullableReport extends ModularReport {
 
