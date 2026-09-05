@@ -130,6 +130,11 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             }
 
             TypeElement classElement = (TypeElement) element;
+            if (!isModularDataFillerSubtype(classElement.asType())) {
+                error("Annotated report classes must extend ModularReport or SubreportModule: "
+                      + classElement.getSimpleName(), classElement);
+                continue;
+            }
             try {
                 generate(classElement);
             } catch (Exception e) {
@@ -284,6 +289,12 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                                               : null;
         if (subreportAnnotation != null) {
             result.addAll(describeSubreportParameters(fieldClass, subreportAnnotation));
+            return;
+        }
+
+        if (isModularDataFillerSubtype(field.asType())) {
+            error("Subreport fields must be declared with a @JasperSubreport-annotated type. Field: "
+                  + field.getSimpleName(), field);
             return;
         }
 
