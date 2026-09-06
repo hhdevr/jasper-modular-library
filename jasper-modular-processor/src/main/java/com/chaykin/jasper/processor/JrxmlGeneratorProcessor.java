@@ -28,6 +28,7 @@ import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
@@ -41,6 +42,7 @@ import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 import java.io.IOException;
+import java.lang.annotation.Annotation;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
@@ -130,6 +132,17 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             }
 
             TypeElement classElement = (TypeElement) element;
+            boolean isRoot = isDirectlyAnnotated(classElement, JasperModularReport.class);
+            boolean isSubreport = isDirectlyAnnotated(classElement, JasperSubreport.class);
+            if (!isRoot && !isSubreport) {
+                continue;
+            }
+            if (isRoot && isSubreport) {
+                error("A class cannot be annotated with both @JasperModularReport and "
+                      + "@JasperSubreport: " + classElement.getSimpleName(),
+                      classElement);
+                continue;
+            }
             if (!isModularDataFillerSubtype(classElement.asType())) {
                 error("Annotated report classes must extend ModularReport or SubreportModule: "
                       + classElement.getSimpleName(), classElement);
@@ -277,12 +290,12 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                          .filter(f -> f.getAnnotation(JasperIgnore.class) == null)
                          .forEach(action);
 
-            current = (TypeElement) typeUtils.asElement(current.getSuperclass());
+            current = asTypeElement(current.getSuperclass());
         }
     }
 
     private void describeField(VariableElement field, List<JrxmlParameter> result) {
-        TypeElement fieldClass = (TypeElement) typeUtils.asElement(field.asType());
+        TypeElement fieldClass = asTypeElement(field.asType());
 
         JasperSubreport subreportAnnotation = fieldClass != null
                                               ? fieldClass.getAnnotation(JasperSubreport.class)
@@ -327,10 +340,13 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     private void describeCollectionField(VariableElement field, List<JrxmlParameter> result) {
         TypeMirror elementType = resolveCollectionElementType(field.asType());
         if (elementType == null) {
+            warn("Collection field has no resolvable element type - nothing generated for: "
+                 + field.getSimpleName()
+                 + ". Declare a concrete element type, for example List<LineItem>.");
             return;
         }
 
-        TypeElement elementClass = (TypeElement) typeUtils.asElement(elementType);
+        TypeElement elementClass = asTypeElement(elementType);
 
         if (elementClass != null && elementClass.getKind() == ElementKind.RECORD) {
             error("Records are not supported as collection elements - JasperReports"
@@ -407,10 +423,15 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         Map<String, JrxmlDatasetField> fields = new LinkedHashMap<>();
         forEachField(elementClass,
                      t -> t.getQualifiedName().contentEquals("java.lang.Object"),
-                     f -> fields.putIfAbsent(
-                             f.getSimpleName().toString(),
-                             new JrxmlDatasetField(f.getSimpleName().toString(),
-                                                   resolveJrxmlClass(f.asType()))));
+                     f -> {
+                         if (f.getModifiers().contains(Modifier.STATIC) && !hasAccessor(f)) {
+                             return;
+                         }
+                         fields.putIfAbsent(
+                                 f.getSimpleName().toString(),
+                                 new JrxmlDatasetField(f.getSimpleName().toString(),
+                                                       resolveJrxmlClass(f.asType())));
+                     });
 
         return new JrxmlDataset(name,
                                 List.copyOf(fields.values()),
@@ -451,6 +472,33 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         }
         String name = element.getQualifiedName().toString();
         return SIMPLE_TYPES.contains(name) || name.startsWith("java.time.");
+    }
+
+    private boolean hasAccessor(VariableElement field) {
+        if (!(field.getEnclosingElement() instanceof TypeElement owner)) {
+            return false;
+        }
+        String name = field.getSimpleName().toString();
+        String suffix = Character.toUpperCase(name.charAt(0)) + name.substring(1);
+        return ElementFilter.methodsIn(elementUtils.getAllMembers(owner))
+                            .stream()
+                            .filter(m -> m.getParameters().isEmpty())
+                            .anyMatch(m -> m.getSimpleName().contentEquals("get" + suffix)
+                                           || m.getSimpleName().contentEquals("is" + suffix));
+    }
+
+    private boolean isDirectlyAnnotated(TypeElement classElement,
+                                        Class<? extends Annotation> annotation) {
+        String name = annotation.getCanonicalName();
+        return classElement.getAnnotationMirrors()
+                           .stream()
+                           .map(m -> asTypeElement(m.getAnnotationType()))
+                           .filter(Objects::nonNull)
+                           .anyMatch(t -> t.getQualifiedName().contentEquals(name));
+    }
+
+    private TypeElement asTypeElement(TypeMirror type) {
+        return typeUtils.asElement(type) instanceof TypeElement typeElement ? typeElement : null;
     }
 
     private boolean isModularDataFillerSubtype(TypeMirror type) {

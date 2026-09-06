@@ -94,12 +94,11 @@ public class JasperReportPrecompiler implements ApplicationRunner {
                 Class<?> clazz = Class.forName(beanDefinition.getBeanClassName());
 
                 JasperModularReport root = clazz.getAnnotation(JasperModularReport.class);
+                JasperSubreport subreport = clazz.getAnnotation(JasperSubreport.class);
+
                 if (root != null && !root.templatePath().isEmpty()) {
                     paths.add(root.templatePath());
-                }
-
-                JasperSubreport subreport = clazz.getAnnotation(JasperSubreport.class);
-                if (subreport != null && !subreport.templatePath().isEmpty()) {
+                } else if (subreport != null && !subreport.templatePath().isEmpty()) {
                     paths.add(subreport.templatePath());
                 }
             } catch (ClassNotFoundException e) {

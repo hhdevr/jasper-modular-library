@@ -50,12 +50,23 @@ public interface JasperModularCompiler {
      * @throws JasperModularException if the implementing class has neither annotation
      */
     default String getTemplatePath() {
-        JasperModularReport root = getClass().getAnnotation(JasperModularReport.class);
+        JasperModularReport root = getClass().getDeclaredAnnotation(JasperModularReport.class);
+        JasperSubreport subreport = getClass().getDeclaredAnnotation(JasperSubreport.class);
+
+        if (root != null && subreport != null) {
+            throw new JasperModularException(
+                    "A class cannot be annotated with both @JasperModularReport and "
+                    + "@JasperSubreport: " + getClass().getName());
+        }
+
+        if (root == null && subreport == null) {
+            root = getClass().getAnnotation(JasperModularReport.class);
+            subreport = getClass().getAnnotation(JasperSubreport.class);
+        }
+
         if (root != null) {
             return root.templatePath();
         }
-
-        JasperSubreport subreport = getClass().getAnnotation(JasperSubreport.class);
         if (subreport != null) {
             return subreport.templatePath();
         }
