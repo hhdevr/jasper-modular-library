@@ -134,6 +134,19 @@ public class JasperModularDataFiller {
         putCollection(field.getName(), data, params);
     }
 
+    private void requireFreePrefix(Map<String, Object> params,
+                                   String key,
+                                   String prefix) {
+        if (params.containsKey(key)) {
+            throw new JasperModularException(
+                    "Duplicate subreport prefix '" + prefix + "' in "
+                    + this.getClass().getSimpleName()
+                    + ". Two subreport fields resolve to the same parameter names. "
+                    + "Give one of them a distinct prefix, for example a subclass annotated "
+                    + "@JasperSubreport(templatePath = ..., prefix = \"Other\").");
+        }
+    }
+
     private void requireModule(Class<?> type, String fieldName) {
         if (!JasperModularDataFiller.class.isAssignableFrom(type)) {
             throw new JasperModularException(
@@ -165,6 +178,8 @@ public class JasperModularDataFiller {
         String prefix = annotation.prefix().isEmpty()
                         ? declaredType.getSimpleName()
                         : annotation.prefix();
+
+        requireFreePrefix(params, prefix + "Report", prefix);
 
         Map<String, Object> childParams = new HashMap<>();
         ((JasperModularDataFiller) module).fillMapParameters(childParams, visited);
@@ -199,6 +214,7 @@ public class JasperModularDataFiller {
         if (rows.isEmpty()) {
             return;
         }
+        requireFreePrefix(params, prefix + "DataSource", prefix);
         params.put(prefix + "DataSource", new JRMapCollectionDataSource(rows));
     }
 

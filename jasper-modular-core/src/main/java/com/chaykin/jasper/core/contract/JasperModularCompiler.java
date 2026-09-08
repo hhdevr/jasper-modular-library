@@ -28,8 +28,18 @@ public interface JasperModularCompiler {
      * @throws JasperModularException if the JRXML resource is not found or compilation fails
      */
     default JasperReport compileReport() {
-        return CACHE.computeIfAbsent(getTemplatePath(), path -> {
-            try (InputStream stream = getClass().getResourceAsStream(path)) {
+        return compileReport(getClass(), getTemplatePath());
+    }
+
+    /**
+     * Compiles the JRXML at the given classpath path and caches it, resolving the resource
+     * against {@code moduleType}.
+     *
+     * @throws JasperModularException if the JRXML resource is not found or compilation fails
+     */
+    static JasperReport compileReport(Class<?> moduleType, String templatePath) {
+        return CACHE.computeIfAbsent(templatePath, path -> {
+            try (InputStream stream = moduleType.getResourceAsStream(path)) {
                 if (stream == null) {
                     throw new JasperModularException(
                             format("JRXML not found: {0}", path));
@@ -38,7 +48,7 @@ public interface JasperModularCompiler {
             } catch (JRException | IOException e) {
                 throw new JasperModularException(
                         format("Error compiling JRXML for {0} in {1}",
-                               getModuleClassName(), path), e);
+                               moduleType.getSimpleName(), path), e);
             }
         });
     }
