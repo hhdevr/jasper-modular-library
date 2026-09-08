@@ -51,6 +51,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,27 +75,10 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
     private static final String IS_PREFIX = "is";
 
+    private static final Set<String> JDK_PACKAGES = Set.of("java.", "javax.", "jdk.", "sun.");
+
     private static final String JR_BEAN_COLLECTION_DS =
             "net.sf.jasperreports.engine.data.JRBeanCollectionDataSource";
-
-    private static final Set<String> SIMPLE_TYPES = Set.of(
-            "java.lang.String",
-            "java.lang.Integer",
-            "java.lang.Long",
-            "java.lang.Double",
-            "java.lang.Float",
-            "java.lang.Boolean",
-            "java.lang.Short",
-            "java.lang.Byte",
-            "java.lang.Character",
-            "java.lang.Number",
-            "java.math.BigDecimal",
-            "java.math.BigInteger",
-            "java.util.UUID",
-            "java.util.Locale",
-            "java.util.Currency",
-            "java.net.URI",
-            "java.net.URL");
 
     private Filer filer;
 
@@ -468,16 +453,19 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
         Map<String, JrxmlDatasetField> fields = new LinkedHashMap<>();
         forEachField(elementClass,
-                     t -> t.getQualifiedName().contentEquals("java.lang.Object"),
+                     t -> t.getQualifiedName().contentEquals(Object.class.getCanonicalName()),
                      f -> {
                          ExecutableElement accessor = findAccessor(f);
                          if (f.getModifiers().contains(Modifier.STATIC) && accessor == null) {
                              return;
                          }
                          String property = propertyName(f, accessor);
+                         TypeMirror propertyType = accessor != null
+                                                   ? accessor.getReturnType()
+                                                   : f.asType();
                          fields.putIfAbsent(property,
                                             new JrxmlDatasetField(property,
-                                                                  resolveJrxmlClass(f.asType())));
+                                                                  resolveJrxmlClass(propertyType)));
                      });
 
         return new JrxmlDataset(name,
@@ -516,9 +504,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     }
 
     private boolean isCollection(TypeMirror type) {
-        TypeElement collection = elementUtils.getTypeElement("java.util.Collection");
-        return typeUtils.isAssignable(typeUtils.erasure(type),
-                                      typeUtils.erasure(collection.asType()));
+        return isAssignableTo(type, Collection.class);
     }
 
     private boolean isSimpleType(TypeElement element) {
@@ -526,7 +512,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             return true;
         }
         String name = element.getQualifiedName().toString();
-        return SIMPLE_TYPES.contains(name) || name.startsWith("java.time.");
+        return JDK_PACKAGES.stream().anyMatch(name::startsWith);
     }
 
     private ExecutableElement findAccessor(VariableElement field) {
@@ -540,7 +526,8 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                                          && m.getModifiers().contains(Modifier.PUBLIC)
                                          && !m.getModifiers().contains(Modifier.STATIC)
                                          && getters.contains(m.getSimpleName().toString()))
-                            .findFirst()
+                            .min(Comparator.comparingInt(
+                                    m -> getters.indexOf(m.getSimpleName().toString())))
                             .orElse(null);
     }
 
@@ -574,16 +561,19 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     }
 
     private boolean isModularDataFillerSubtype(TypeMirror type) {
-        TypeElement filler = elementUtils.getTypeElement(
-                "com.chaykin.jasper.core.contract.JasperModularDataFiller");
-        return filler != null && typeUtils.isAssignable(typeUtils.erasure(type),
-                                                        typeUtils.erasure(filler.asType()));
+        return isAssignableTo(type, JasperModularDataFiller.class);
+    }
+
+    private boolean isAssignableTo(TypeMirror type, Class<?> target) {
+        TypeElement targetElement = elementUtils.getTypeElement(target.getCanonicalName());
+        return targetElement != null
+               && typeUtils.isAssignable(typeUtils.erasure(type),
+                                         typeUtils.erasure(targetElement.asType()));
     }
 
     private boolean isJasperModularDataFiller(TypeElement element) {
         return element.getQualifiedName()
-                      .toString()
-                      .equals("com.chaykin.jasper.core.contract.JasperModularDataFiller");
+                      .contentEquals(JasperModularDataFiller.class.getCanonicalName());
     }
 
     private TypeMirror resolveCollectionElementType(TypeMirror type) {
