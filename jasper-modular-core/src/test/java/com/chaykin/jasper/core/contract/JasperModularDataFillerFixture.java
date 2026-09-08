@@ -42,6 +42,37 @@ final class JasperModularDataFillerFixture {
 
     }
 
+    static class SpecialItemsModule extends ItemsModule {
+
+        SpecialItemsModule(String title) {super(title);}
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreport.jrxml")
+    static class BaseTypedSubreportReport extends ModularReport {
+
+        SubreportModule section;
+
+        BaseTypedSubreportReport(SubreportModule section) {this.section = section;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Pojo")
+    static class PojoModule {
+
+        String title = "not a module";
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreport.jrxml")
+    static class PojoSubreportReport extends ModularReport {
+
+        PojoModule pojoModule = new PojoModule();
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
+    static class PojoListReport extends ModularReport {
+
+        List<PojoModule> modules = List.of(new PojoModule());
+    }
+
     @JasperSubreport(templatePath = "/reports/other.jrxml")
     static class OtherModule extends SubreportModule {
 
@@ -157,6 +188,14 @@ final class JasperModularDataFillerFixture {
         List<RecordItem> items;
 
         RecordListReport(List<RecordItem> items) {this.items = items;}
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
+    static class WildcardListReport extends ModularReport {
+
+        List<? extends ItemsModule> modules;
+
+        WildcardListReport(List<? extends ItemsModule> modules) {this.modules = modules;}
     }
 
     @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")

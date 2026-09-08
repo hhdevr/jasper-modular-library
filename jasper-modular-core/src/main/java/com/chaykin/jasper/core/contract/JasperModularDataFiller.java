@@ -9,6 +9,8 @@ import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.WildcardType;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -78,13 +80,20 @@ public class JasperModularDataFiller {
                 return;
             }
 
-            JasperSubreport annotation = value.getClass().getAnnotation(JasperSubreport.class);
+            Class<?> fieldType = field.getType();
+            JasperSubreport annotation = fieldType.getAnnotation(JasperSubreport.class);
             if (annotation != null) {
+                requireModule(fieldType, field.getName());
                 if (value instanceof SubreportModule module && module.isEmpty()) {
                     return;
                 }
-                putSubreport((JasperModularCompiler) value, annotation, params, visited);
+                putSubreport(fieldType, (JasperModularCompiler) value, annotation, params, visited);
                 return;
+            }
+            if (JasperModularDataFiller.class.isAssignableFrom(fieldType)) {
+                throw new JasperModularException(
+                        "Subreport fields must be declared with a @JasperSubreport-annotated type. "
+                        + "Field: " + field.getName());
             }
 
             if (Collection.class.isAssignableFrom(field.getType())) {
@@ -113,6 +122,7 @@ public class JasperModularDataFiller {
                     + "data sources require JavaBean getters. Field: " + field.getName());
         }
         if (elementType.isAnnotationPresent(JasperSubreport.class)) {
+            requireModule(elementType, field.getName());
             putSubreportList(data, elementType, params, visited);
             return;
         }
@@ -124,23 +134,52 @@ public class JasperModularDataFiller {
         putCollection(field.getName(), data, params);
     }
 
-    private Class<?> collectionElementType(Field field) {
-        if (field.getGenericType() instanceof ParameterizedType parameterizedType
-            && parameterizedType.getActualTypeArguments().length > 0
-            && parameterizedType.getActualTypeArguments()[0] instanceof Class<?> elementType) {
-            return elementType;
+    private void requireFreePrefix(Map<String, Object> params,
+                                   String key,
+                                   String prefix) {
+        if (params.containsKey(key)) {
+            throw new JasperModularException(
+                    "Duplicate subreport prefix '" + prefix + "' in "
+                    + this.getClass().getSimpleName()
+                    + ". Two subreport fields resolve to the same parameter names. "
+                    + "Give one of them a distinct prefix, for example a subclass annotated "
+                    + "@JasperSubreport(templatePath = ..., prefix = \"Other\").");
         }
-        return null;
     }
 
-    private void putSubreport(JasperModularCompiler module,
+    private void requireModule(Class<?> type, String fieldName) {
+        if (!JasperModularDataFiller.class.isAssignableFrom(type)) {
+            throw new JasperModularException(
+                    "@JasperSubreport class " + type.getSimpleName()
+                    + " must extend SubreportModule. Field: " + fieldName);
+        }
+    }
+
+    private Class<?> collectionElementType(Field field) {
+        if (!(field.getGenericType() instanceof ParameterizedType parameterizedType)
+            || parameterizedType.getActualTypeArguments().length == 0) {
+            return null;
+        }
+        Type argument = parameterizedType.getActualTypeArguments()[0];
+        if (argument instanceof WildcardType wildcard) {
+            argument = wildcard.getLowerBounds().length > 0
+                       ? wildcard.getLowerBounds()[0]
+                       : wildcard.getUpperBounds()[0];
+        }
+        return argument instanceof Class<?> elementType ? elementType : null;
+    }
+
+    private void putSubreport(Class<?> declaredType,
+                              JasperModularCompiler module,
                               JasperSubreport annotation,
                               Map<String, Object> params,
                               Set<Class<?>> visited) {
 
         String prefix = annotation.prefix().isEmpty()
-                        ? module.getClass().getSimpleName()
+                        ? declaredType.getSimpleName()
                         : annotation.prefix();
+
+        requireFreePrefix(params, prefix + "Report", prefix);
 
         Map<String, Object> childParams = new HashMap<>();
         ((JasperModularDataFiller) module).fillMapParameters(childParams, visited);
@@ -162,7 +201,7 @@ public class JasperModularDataFiller {
 
         List<Map<String, ?>> rows = new ArrayList<>();
         for (Object element: data) {
-            if (element instanceof SubreportModule module && module.isEmpty()) {
+            if (element == null || (element instanceof SubreportModule module && module.isEmpty())) {
                 continue;
             }
             Map<String, Object> childParams = new HashMap<>();
@@ -175,6 +214,7 @@ public class JasperModularDataFiller {
         if (rows.isEmpty()) {
             return;
         }
+        requireFreePrefix(params, prefix + "DataSource", prefix);
         params.put(prefix + "DataSource", new JRMapCollectionDataSource(rows));
     }
 

@@ -1,5 +1,6 @@
 package com.chaykin.jasper.core.contract;
 
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.BaseTypedSubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ChildReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.CollectionReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.CompanyReport;
@@ -17,12 +18,15 @@ import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NoPrefixR
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullSubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullableReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.OtherModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.PojoListReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.PojoSubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RecordItem;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RecordListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RichListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RichModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ScalarReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SelfNodeModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SpecialItemsModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.StaticFieldReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportReport;
@@ -30,6 +34,7 @@ import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SummaryMo
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.WildcardListReport;
 import com.chaykin.jasper.core.exception.JasperModularException;
 import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
@@ -40,6 +45,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -192,6 +198,57 @@ class JasperModularDataFillerTest {
             assertThat(params)
                     .containsKey("ItemsReport")
                     .containsKey("ItemsMapParameter");
+        }
+
+        @Test
+        @DisplayName("subclass instance of an annotated module is classified by the declared field type")
+        void subclassInstance_usesDeclaredTypeWiring() {
+            // given
+            var report = new SubreportReport(new SpecialItemsModule("A"));
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            assertThat(params).containsKey("ItemsReport")
+                              .containsKey("ItemsMapParameter")
+                              .doesNotContainKey("itemsModule");
+        }
+
+        @Test
+        @DisplayName("field declared with an unannotated module type throws")
+        void unannotatedDeclaredModuleType_throwsException() {
+            // given
+            var report = new BaseTypedSubreportReport(new ItemsModule("A"));
+
+            // when / then
+            assertThatThrownBy(report::fillMapParameters)
+                    .isInstanceOf(JasperModularException.class)
+                    .hasMessageContaining("@JasperSubreport-annotated type");
+        }
+
+        @Test
+        @DisplayName("annotated class that does not extend SubreportModule throws a clear error")
+        void annotatedPojo_throwsException() {
+            // given
+            var report = new PojoSubreportReport();
+
+            // when / then
+            assertThatThrownBy(report::fillMapParameters)
+                    .isInstanceOf(JasperModularException.class)
+                    .hasMessageContaining("PojoModule must extend SubreportModule");
+        }
+
+        @Test
+        @DisplayName("list of annotated classes that do not extend SubreportModule throws a clear error")
+        void annotatedPojoList_throwsException() {
+            // given
+            var report = new PojoListReport();
+
+            // when / then
+            assertThatThrownBy(report::fillMapParameters)
+                    .isInstanceOf(JasperModularException.class)
+                    .hasMessageContaining("PojoModule must extend SubreportModule");
         }
 
         @Test
@@ -493,6 +550,39 @@ class JasperModularDataFillerTest {
 
             // then
             assertThat(params).doesNotContainKey("ToggleDataSource");
+        }
+
+        @Test
+        @DisplayName("null elements are skipped without producing a row")
+        void nullElements_areSkipped() throws Exception {
+            // given
+            var report = new SubreportListReport(
+                    Arrays.asList(new ItemsModule("A"), null, new ItemsModule("B")));
+
+            // when
+            var dataSource =
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("ItemsDataSource");
+
+            // then
+            int rows = 0;
+            while (dataSource.next()) {
+                rows++;
+            }
+            assertThat(rows).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("wildcard element type is resolved to its bound")
+        void wildcardElementType_producesRepeatingSubreport() {
+            // given
+            var report = new WildcardListReport(List.of(new ItemsModule("A")));
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            assertThat(params).containsKey("ItemsDataSource")
+                              .doesNotContainKey("modules");
         }
 
         @Test

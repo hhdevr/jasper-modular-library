@@ -12,6 +12,7 @@ import com.chaykin.jasper.processor.model.JrxmlDataset;
 import com.chaykin.jasper.processor.model.JrxmlDatasetField;
 import com.chaykin.jasper.processor.model.JrxmlParameter;
 import net.sf.jasperreports.engine.JRException;
+import net.sf.jasperreports.engine.data.JRAbstractBeanDataSource;
 import net.sf.jasperreports.engine.design.JRDesignBand;
 import net.sf.jasperreports.engine.design.JRDesignSection;
 import net.sf.jasperreports.engine.design.JasperDesign;
@@ -21,6 +22,7 @@ import net.sf.jasperreports.engine.xml.JRXmlLoader;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
+import javax.annotation.processing.FilerException;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -28,10 +30,13 @@ import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.PrimitiveType;
+import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.WildcardType;
 import javax.lang.model.util.ElementFilter;
@@ -40,10 +45,13 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
+import java.beans.Introspector;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.annotation.Annotation;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +68,10 @@ import java.util.function.Predicate;
         "com.chaykin.jasper.core.annotation.JasperSubreport"
 })
 public class JrxmlGeneratorProcessor extends AbstractProcessor {
+
+    private static final String GET_PREFIX = "get";
+
+    private static final String IS_PREFIX = "is";
 
     private static final String JR_BEAN_COLLECTION_DS =
             "net.sf.jasperreports.engine.data.JRBeanCollectionDataSource";
@@ -122,20 +134,36 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         for (Element element: elements) {
             if (element.getKind() != ElementKind.CLASS) {
                 error("@JasperModularReport/@JasperSubreport is not supported on "
-                                      + element.getKind().toString().toLowerCase()
-                                      + " - only classes extending ModularReport/SubreportModule"
-                                      + " are supported",
-                                      element);
+                      + element.getKind().toString().toLowerCase()
+                      + " - only classes extending ModularReport/SubreportModule"
+                      + " are supported",
+                      element);
                 continue;
             }
 
             TypeElement classElement = (TypeElement) element;
+            boolean isRoot = isDirectlyAnnotated(classElement, JasperModularReport.class);
+            boolean isSubreport = isDirectlyAnnotated(classElement, JasperSubreport.class);
+            if (!isRoot && !isSubreport) {
+                continue;
+            }
+            if (isRoot && isSubreport) {
+                error("A class cannot be annotated with both @JasperModularReport and "
+                      + "@JasperSubreport: " + classElement.getSimpleName(),
+                      classElement);
+                continue;
+            }
+            if (!isModularDataFillerSubtype(classElement.asType())) {
+                error("Annotated report classes must extend ModularReport or SubreportModule: "
+                      + classElement.getSimpleName(), classElement);
+                continue;
+            }
             try {
                 generate(classElement);
             } catch (Exception e) {
                 error("Failed to generate JRXML for "
-                                      + classElement.getSimpleName() + ": " + e,
-                                      classElement);
+                      + classElement.getSimpleName() + ": " + e,
+                      classElement);
             }
         }
     }
@@ -152,7 +180,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         List<JrxmlParameter> fields = describeFields(classElement);
 
         note("Generating JRXML [" + mode + "] for: "
-                              + classElement.getSimpleName() + " -> " + templatePath);
+             + classElement.getSimpleName() + " -> " + templatePath);
 
         JasperDesign design = switch (mode) {
             case CREATE -> createEmptyDesign(classElement);
@@ -160,15 +188,24 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             default -> throw new IllegalStateException("Unreachable: mode=" + mode);
         };
 
-        writeOutput(templatePath, design, fields);
+        writeOutput(classElement, templatePath, design, fields);
     }
 
-    private void writeOutput(String templatePath,
+    private void writeOutput(TypeElement classElement,
+                             String templatePath,
                              JasperDesign design,
                              List<JrxmlParameter> fields) throws IOException, JRException {
-        FileObject output = filer.createResource(StandardLocation.SOURCE_OUTPUT,
-                                                 "",
-                                                 templatePath.replaceFirst("^/", ""));
+        FileObject output;
+        try {
+            output = filer.createResource(StandardLocation.SOURCE_OUTPUT,
+                                          "",
+                                          templatePath.replaceFirst("^/", ""));
+        } catch (FilerException e) {
+            error("Template path '" + templatePath + "' is already generated - two report "
+                  + "classes cannot share one template. Give each class its own templatePath.",
+                  classElement);
+            return;
+        }
 
         try (OutputStream out = output.openOutputStream()) {
             new JrxmlTemplateInjector(messager).inject(design, fields, out);
@@ -188,9 +225,9 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             }
         }
         warn("Existing template not found - generating a blank skeleton: "
-                              + templatePath
-                              + ". If the template exists, the build did not expose it to the "
-                              + "annotation processor; do not copy the skeleton over your design.");
+             + templatePath
+             + ". If the template exists, the build did not expose it to the "
+             + "annotation processor; do not copy the skeleton over your design.");
         return createEmptyDesign(classElement);
     }
 
@@ -255,7 +292,25 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         forEachField(classElement,
                      this::isJasperModularDataFiller,
                      f -> describeField(f, result));
+        reportDuplicatePrefixes(classElement, result);
         return result;
+    }
+
+    private void reportDuplicatePrefixes(TypeElement classElement, List<JrxmlParameter> fields) {
+        Set<String> seen = new HashSet<>();
+        fields.stream()
+              .filter(f -> f.subreportPrefix() != null)
+              .filter(f -> f.name().equals(f.subreportPrefix() + "Report")
+                           || f.name().equals(f.subreportPrefix() + "DataSource"))
+              .map(JrxmlParameter::subreportPrefix)
+              .filter(prefix -> !seen.add(prefix))
+              .distinct()
+              .forEach(prefix -> error(
+                      "Duplicate subreport prefix '" + prefix + "'. Two subreport fields resolve "
+                      + "to the same parameter names, so one of them would be lost. Give one a "
+                      + "distinct prefix, for example a subclass annotated "
+                      + "@JasperSubreport(templatePath = ..., prefix = \"Other\").",
+                      classElement));
     }
 
     /**
@@ -272,18 +327,24 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                          .filter(f -> f.getAnnotation(JasperIgnore.class) == null)
                          .forEach(action);
 
-            current = (TypeElement) typeUtils.asElement(current.getSuperclass());
+            current = asTypeElement(current.getSuperclass());
         }
     }
 
     private void describeField(VariableElement field, List<JrxmlParameter> result) {
-        TypeElement fieldClass = (TypeElement) typeUtils.asElement(field.asType());
+        TypeElement fieldClass = asTypeElement(field.asType());
 
         JasperSubreport subreportAnnotation = fieldClass != null
                                               ? fieldClass.getAnnotation(JasperSubreport.class)
                                               : null;
         if (subreportAnnotation != null) {
             result.addAll(describeSubreportParameters(fieldClass, subreportAnnotation));
+            return;
+        }
+
+        if (isModularDataFillerSubtype(field.asType())) {
+            error("Subreport fields must be declared with a @JasperSubreport-annotated type. Field: "
+                  + field.getSimpleName(), field);
             return;
         }
 
@@ -316,16 +377,19 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     private void describeCollectionField(VariableElement field, List<JrxmlParameter> result) {
         TypeMirror elementType = resolveCollectionElementType(field.asType());
         if (elementType == null) {
+            warn("Collection field has no resolvable element type - nothing generated for: "
+                 + field.getSimpleName()
+                 + ". Declare a concrete element type, for example List<LineItem>.");
             return;
         }
 
-        TypeElement elementClass = (TypeElement) typeUtils.asElement(elementType);
+        TypeElement elementClass = asTypeElement(elementType);
 
         if (elementClass != null && elementClass.getKind() == ElementKind.RECORD) {
             error("Records are not supported as collection elements - JasperReports"
-                                  + " bean data sources require JavaBean getters. Field: "
-                                  + field.getSimpleName(),
-                                  field);
+                  + " bean data sources require JavaBean getters. Field: "
+                  + field.getSimpleName(),
+                  field);
             return;
         }
 
@@ -339,8 +403,8 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
         if (isModularDataFillerSubtype(elementType)) {
             error("Collection elements that are modular reports must be annotated "
-                                  + "with @JasperSubreport. Field: " + field.getSimpleName(),
-                                  field);
+                  + "with @JasperSubreport. Field: " + field.getSimpleName(),
+                  field);
             return;
         }
 
@@ -352,7 +416,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                           ? collectionAnn.columnWidth()
                           : JasperCollection.DEFAULT_COLUMN_WIDTH;
 
-        JrxmlDataset dataset = elementClass != null && !isSimpleType(elementClass)
+        JrxmlDataset dataset = elementClass != null
                                ? describeDataset(field.getSimpleName().toString(),
                                                  elementClass,
                                                  componentType,
@@ -393,18 +457,41 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                                          TypeElement elementClass,
                                          CollectionComponentType componentType,
                                          int columnWidth) {
+        if (isSimpleType(elementClass)) {
+            return new JrxmlDataset(name,
+                                    List.of(new JrxmlDatasetField(
+                                            JRAbstractBeanDataSource.CURRENT_BEAN_MAPPING,
+                                            elementClass.getQualifiedName().toString())),
+                                    componentType,
+                                    columnWidth);
+        }
+
         Map<String, JrxmlDatasetField> fields = new LinkedHashMap<>();
         forEachField(elementClass,
                      t -> t.getQualifiedName().contentEquals("java.lang.Object"),
-                     f -> fields.putIfAbsent(
-                             f.getSimpleName().toString(),
-                             new JrxmlDatasetField(f.getSimpleName().toString(),
-                                                   resolveJrxmlClass(f.asType()))));
+                     f -> {
+                         ExecutableElement accessor = findAccessor(f);
+                         if (f.getModifiers().contains(Modifier.STATIC) && accessor == null) {
+                             return;
+                         }
+                         String property = propertyName(f, accessor);
+                         fields.putIfAbsent(property,
+                                            new JrxmlDatasetField(property,
+                                                                  resolveJrxmlClass(f.asType())));
+                     });
 
         return new JrxmlDataset(name,
                                 List.copyOf(fields.values()),
                                 componentType,
                                 columnWidth);
+    }
+
+    private String propertyName(VariableElement field, ExecutableElement accessor) {
+        String getter = accessor != null
+                        ? accessor.getSimpleName().toString()
+                        : getterNames(field).get(0);
+        String prefix = getter.startsWith(IS_PREFIX) ? IS_PREFIX : GET_PREFIX;
+        return Introspector.decapitalize(getter.substring(prefix.length()));
     }
 
     private GenerationMode resolveMode(TypeElement classElement) {
@@ -440,6 +527,50 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         }
         String name = element.getQualifiedName().toString();
         return SIMPLE_TYPES.contains(name) || name.startsWith("java.time.");
+    }
+
+    private ExecutableElement findAccessor(VariableElement field) {
+        if (!(field.getEnclosingElement() instanceof TypeElement owner)) {
+            return null;
+        }
+        List<String> getters = getterNames(field);
+        return ElementFilter.methodsIn(elementUtils.getAllMembers(owner))
+                            .stream()
+                            .filter(m -> m.getParameters().isEmpty()
+                                         && m.getModifiers().contains(Modifier.PUBLIC)
+                                         && !m.getModifiers().contains(Modifier.STATIC)
+                                         && getters.contains(m.getSimpleName().toString()))
+                            .findFirst()
+                            .orElse(null);
+    }
+
+    private List<String> getterNames(VariableElement field) {
+        String name = field.getSimpleName().toString();
+        String capitalized = Character.toUpperCase(name.charAt(0)) + name.substring(1);
+
+        if (field.asType().getKind() != TypeKind.BOOLEAN) {
+            return List.of(GET_PREFIX + capitalized);
+        }
+        boolean alreadyPrefixed = name.length() > IS_PREFIX.length()
+                                  && name.startsWith(IS_PREFIX)
+                                  && Character.isUpperCase(name.charAt(IS_PREFIX.length()));
+        return alreadyPrefixed
+               ? List.of(name, GET_PREFIX + capitalized)
+               : List.of(IS_PREFIX + capitalized, GET_PREFIX + capitalized);
+    }
+
+    private boolean isDirectlyAnnotated(TypeElement classElement,
+                                        Class<? extends Annotation> annotation) {
+        String name = annotation.getCanonicalName();
+        return classElement.getAnnotationMirrors()
+                           .stream()
+                           .map(m -> asTypeElement(m.getAnnotationType()))
+                           .filter(Objects::nonNull)
+                           .anyMatch(t -> t.getQualifiedName().contentEquals(name));
+    }
+
+    private TypeElement asTypeElement(TypeMirror type) {
+        return typeUtils.asElement(type) instanceof TypeElement typeElement ? typeElement : null;
     }
 
     private boolean isModularDataFillerSubtype(TypeMirror type) {
