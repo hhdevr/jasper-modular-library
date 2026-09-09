@@ -11,6 +11,7 @@ import com.chaykin.jasper.core.contract.JasperModularDataFiller;
 import com.chaykin.jasper.processor.model.JrxmlDataset;
 import com.chaykin.jasper.processor.model.JrxmlDatasetField;
 import com.chaykin.jasper.processor.model.JrxmlParameter;
+import com.chaykin.jasper.processor.model.TemplateSpec;
 import net.sf.jasperreports.engine.JRException;
 import net.sf.jasperreports.engine.data.JRAbstractBeanDataSource;
 import net.sf.jasperreports.engine.design.JRDesignBand;
@@ -62,6 +63,8 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Annotation processor that generates and updates JRXML report templates at compile time.
  */
@@ -109,13 +112,16 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             return false;
         }
 
-        processAnnotated(roundEnv.getElementsAnnotatedWith(JasperModularReport.class));
-        processAnnotated(roundEnv.getElementsAnnotatedWith(JasperSubreport.class));
+        processAnnotated(roundEnv.getElementsAnnotatedWith(JasperModularReport.class),
+                         JasperModularReport.class);
+        processAnnotated(roundEnv.getElementsAnnotatedWith(JasperSubreport.class),
+                         JasperSubreport.class);
 
         return true;
     }
 
-    private void processAnnotated(Set<? extends Element> elements) {
+    private void processAnnotated(Set<? extends Element> elements,
+                                  Class<? extends Annotation> annotation) {
         for (Element element: elements) {
             if (element.getKind() != ElementKind.CLASS) {
                 error("@JasperModularReport/@JasperSubreport is not supported on "
@@ -129,22 +135,26 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             TypeElement classElement = (TypeElement) element;
             boolean isRoot = isDirectlyAnnotated(classElement, JasperModularReport.class);
             boolean isSubreport = isDirectlyAnnotated(classElement, JasperSubreport.class);
-            if (!isRoot && !isSubreport) {
-                continue;
-            }
+
             if (isRoot && isSubreport) {
                 error("A class cannot be annotated with both @JasperModularReport and "
                       + "@JasperSubreport: " + classElement.getSimpleName(),
                       classElement);
                 continue;
             }
+
+            if (!isDirectlyAnnotated(classElement, annotation)) {
+                continue;
+            }
+
             if (!isModularDataFillerSubtype(classElement.asType())) {
                 error("Annotated report classes must extend ModularReport or SubreportModule: "
                       + classElement.getSimpleName(), classElement);
                 continue;
             }
+
             try {
-                generate(classElement);
+                generate(classElement, isSubreport);
             } catch (Exception e) {
                 error("Failed to generate JRXML for "
                       + classElement.getSimpleName() + ": " + e,
@@ -153,23 +163,26 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         }
     }
 
-    private void generate(TypeElement classElement) throws IOException, JRException {
-        GenerationMode mode = resolveMode(classElement);
+    private void generate(TypeElement classElement, boolean subreport) throws IOException,
+                                                                              JRException {
+        TemplateSpec spec = resolveTemplateSpec(classElement, subreport);
+        GenerationMode mode = spec.mode();
+
 
         if (mode == GenerationMode.NONE) {
             note("Skipping generation for: " + classElement.getSimpleName());
             return;
         }
 
-        String templatePath = resolveTemplatePath(classElement);
+        String templatePath = spec.templatePath();
         List<JrxmlParameter> fields = describeFields(classElement);
 
         note("Generating JRXML [" + mode + "] for: "
              + classElement.getSimpleName() + " -> " + templatePath);
 
         JasperDesign design = switch (mode) {
-            case CREATE -> createEmptyDesign(classElement);
-            case INJECT -> resolveDesign(templatePath, classElement);
+            case CREATE -> createEmptyDesign(spec);
+            case INJECT -> resolveDesign(spec);
             default -> throw new IllegalStateException("Unreachable: mode=" + mode);
         };
 
@@ -201,19 +214,19 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
      * Loads the existing JRXML via {@link #findExistingTemplate}, or falls back to a blank
      * design with a warning.
      */
-    private JasperDesign resolveDesign(String templatePath,
-                                       TypeElement classElement) throws IOException, JRException {
-        try (InputStream stream = findExistingTemplate(templatePath)) {
+    private JasperDesign resolveDesign(TemplateSpec spec) throws IOException,
+                                                                 JRException {
+        try (InputStream stream = findExistingTemplate(spec.templatePath())) {
             if (stream != null) {
-                note("Injecting into existing: " + templatePath);
+                note("Injecting into existing: " + spec.templatePath());
                 return JRXmlLoader.load(stream);
             }
         }
         warn("Existing template not found - generating a blank skeleton: "
-             + templatePath
+             + spec.templatePath()
              + ". If the template exists, the build did not expose it to the "
              + "annotation processor; do not copy the skeleton over your design.");
-        return createEmptyDesign(classElement);
+        return createEmptyDesign(spec);
     }
 
     /**
@@ -229,9 +242,8 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         return getClass().getClassLoader().getResourceAsStream(path);
     }
 
-    private JasperDesign createEmptyDesign(TypeElement classElement) {
-        boolean isSubreport = classElement.getAnnotation(JasperSubreport.class) != null;
-        boolean isLandscape = resolveOrientation(classElement) == PageOrientation.LANDSCAPE;
+    private JasperDesign createEmptyDesign(TemplateSpec spec) {
+        boolean isLandscape = spec.orientation() == PageOrientation.LANDSCAPE;
 
         JasperDesign design = new JasperDesign();
         design.setName(isLandscape ? "Blank_A4_Landscape" : "Blank_A4");
@@ -247,7 +259,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             design.setColumnWidth(555);
         }
 
-        int margin = isSubreport ? 0 : 20;
+        int margin = spec.subreport() ? 0 : 20;
         design.setLeftMargin(margin);
         design.setRightMargin(margin);
         design.setTopMargin(margin);
@@ -482,25 +494,21 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         return Introspector.decapitalize(getter.substring(prefix.length()));
     }
 
-    private GenerationMode resolveMode(TypeElement classElement) {
-        JasperModularReport root = classElement.getAnnotation(JasperModularReport.class);
-        return root != null
-               ? root.mode()
-               : Objects.requireNonNull(classElement.getAnnotation(JasperSubreport.class)).mode();
-    }
+    private TemplateSpec resolveTemplateSpec(TypeElement typeElement, boolean isSubreport) {
+        if (isSubreport) {
+            JasperSubreport annotation =
+                    requireNonNull(typeElement.getAnnotation(JasperSubreport.class));
+            return new TemplateSpec(annotation.mode(),
+                                    annotation.templatePath(),
+                                    annotation.orientation(),
+                                    true);
+        }
 
-    private String resolveTemplatePath(TypeElement classElement) {
-        JasperModularReport root = classElement.getAnnotation(JasperModularReport.class);
-        return root != null
-               ? root.templatePath()
-               : Objects.requireNonNull(classElement.getAnnotation(JasperSubreport.class)).templatePath();
-    }
-
-    private PageOrientation resolveOrientation(TypeElement classElement) {
-        JasperModularReport root = classElement.getAnnotation(JasperModularReport.class);
-        return root != null
-               ? root.orientation()
-               : Objects.requireNonNull(classElement.getAnnotation(JasperSubreport.class)).orientation();
+        JasperModularReport annotation = requireNonNull(typeElement.getAnnotation(JasperModularReport.class));
+        return new TemplateSpec(annotation.mode(),
+                                annotation.templatePath(),
+                                annotation.orientation(),
+                                false);
     }
 
     private boolean isCollection(TypeMirror type) {
