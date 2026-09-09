@@ -87,7 +87,7 @@ public class JasperModularDataFiller {
                 if (value instanceof SubreportModule module && module.isEmpty()) {
                     return;
                 }
-                putSubreport(fieldType, (JasperModularCompiler) value, annotation, params, visited);
+                putSubreport(field.getName(), (JasperModularCompiler) value, params, visited);
                 return;
             }
             if (JasperModularDataFiller.class.isAssignableFrom(fieldType)) {
@@ -123,7 +123,7 @@ public class JasperModularDataFiller {
         }
         if (elementType.isAnnotationPresent(JasperSubreport.class)) {
             requireModule(elementType, field.getName());
-            putSubreportList(data, elementType, params, visited);
+            putSubreportList(field.getName(), data, params, visited);
             return;
         }
         if (JasperModularDataFiller.class.isAssignableFrom(elementType)) {
@@ -134,16 +134,13 @@ public class JasperModularDataFiller {
         putCollection(field.getName(), data, params);
     }
 
-    private void requireFreePrefix(Map<String, Object> params,
-                                   String key,
-                                   String prefix) {
+    private void requireFreeName(Map<String, Object> params, String key) {
         if (params.containsKey(key)) {
             throw new JasperModularException(
-                    "Duplicate subreport prefix '" + prefix + "' in "
+                    "Duplicate subreport parameter '" + key + "' in "
                     + this.getClass().getSimpleName()
-                    + ". Two subreport fields resolve to the same parameter names. "
-                    + "Give one of them a distinct prefix, for example a subclass annotated "
-                    + "@JasperSubreport(templatePath = ..., prefix = \"Other\").");
+                    + ". Two fields resolve to the same name, so one of them would be lost. "
+                    + "Rename one of the fields.");
         }
     }
 
@@ -169,17 +166,12 @@ public class JasperModularDataFiller {
         return argument instanceof Class<?> elementType ? elementType : null;
     }
 
-    private void putSubreport(Class<?> declaredType,
+    private void putSubreport(String prefix,
                               JasperModularCompiler module,
-                              JasperSubreport annotation,
                               Map<String, Object> params,
                               Set<Class<?>> visited) {
 
-        String prefix = annotation.prefix().isEmpty()
-                        ? declaredType.getSimpleName()
-                        : annotation.prefix();
-
-        requireFreePrefix(params, prefix + "Report", prefix);
+        requireFreeName(params, prefix + "Report");
 
         Map<String, Object> childParams = new HashMap<>();
         ((JasperModularDataFiller) module).fillMapParameters(childParams, visited);
@@ -188,16 +180,13 @@ public class JasperModularDataFiller {
     }
 
     /** Renders a collection of {@link JasperSubreport}-annotated modules as a repeating subreport. */
-    private void putSubreportList(Collection<?> data,
-                                  Class<?> elementType,
+    private void putSubreportList(String prefix,
+                                  Collection<?> data,
                                   Map<String, Object> params,
                                   Set<Class<?>> visited) {
         if (data.isEmpty()) {
             return;
         }
-
-        JasperSubreport annotation = elementType.getAnnotation(JasperSubreport.class);
-        String prefix = annotation.prefix().isEmpty() ? elementType.getSimpleName() : annotation.prefix();
 
         List<Map<String, ?>> rows = new ArrayList<>();
         for (Object element: data) {
@@ -214,7 +203,7 @@ public class JasperModularDataFiller {
         if (rows.isEmpty()) {
             return;
         }
-        requireFreePrefix(params, prefix + "DataSource", prefix);
+        requireFreeName(params, prefix + "DataSource");
         params.put(prefix + "DataSource", new JRMapCollectionDataSource(rows));
     }
 

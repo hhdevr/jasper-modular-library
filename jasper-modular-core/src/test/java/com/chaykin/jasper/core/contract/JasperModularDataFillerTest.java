@@ -186,8 +186,8 @@ class JasperModularDataFillerTest {
     class SubreportFields {
 
         @Test
-        @DisplayName("subreport field produces <prefix>Report and <prefix>MapParameter using annotation prefix")
-        void subreportField_producesTwoEntriesWithAnnotationPrefix() {
+        @DisplayName("subreport field produces <field>Report and <field>MapParameter")
+        void subreportField_producesTwoEntriesNamedAfterTheField() {
             // given
             var report = new SubreportReport(new ItemsModule("Section A"));
 
@@ -196,8 +196,8 @@ class JasperModularDataFillerTest {
 
             // then
             assertThat(params)
-                    .containsKey("ItemsReport")
-                    .containsKey("ItemsMapParameter");
+                    .containsKey("itemsModuleReport")
+                    .containsKey("itemsModuleMapParameter");
         }
 
         @Test
@@ -210,9 +210,9 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then
-            assertThat(params).containsKey("ItemsReport")
-                              .containsKey("ItemsMapParameter")
-                              .doesNotContainKey("itemsModule");
+            assertThat(params).containsKey("itemsModuleReport")
+                              .containsKey("itemsModuleMapParameter")
+                              .doesNotContainKey("section");
         }
 
         @Test
@@ -252,8 +252,8 @@ class JasperModularDataFillerTest {
         }
 
         @Test
-        @DisplayName("subreport field uses simple class name as prefix when prefix attribute is not set")
-        void subreportField_usesClassNameAsPrefixWhenNotSet() {
+        @DisplayName("parameter name comes from the field, not from the module type")
+        void subreportField_isNamedAfterFieldNotType() {
             // given
             var report = new NoPrefixReport(new OtherModule("note"));
 
@@ -262,8 +262,8 @@ class JasperModularDataFillerTest {
 
             // then
             assertThat(params)
-                    .containsKey("OtherModuleReport")
-                    .containsKey("OtherModuleMapParameter");
+                    .containsKey("otherModuleReport")
+                    .containsKey("otherModuleMapParameter");
         }
 
         @Test
@@ -280,10 +280,10 @@ class JasperModularDataFillerTest {
 
             // then
             assertThat(params)
-                    .containsKey("ItemsReport")
-                    .containsKey("ItemsMapParameter")
-                    .containsKey("OtherModuleReport")
-                    .containsKey("OtherModuleMapParameter");
+                    .containsKey("itemsModuleReport")
+                    .containsKey("itemsModuleMapParameter")
+                    .containsKey("otherModuleReport")
+                    .containsKey("otherModuleMapParameter");
         }
     }
 
@@ -325,8 +325,8 @@ class JasperModularDataFillerTest {
             assertThat(params).containsEntry("title", "Invoice");
             assertThat(params.get("items")).isInstanceOf(JRBeanCollectionDataSource.class);
             assertThat(params)
-                    .containsKey("ItemsReport")
-                    .containsKey("ItemsMapParameter");
+                    .containsKey("itemsModuleReport")
+                    .containsKey("itemsModuleMapParameter");
         }
     }
 
@@ -341,8 +341,8 @@ class JasperModularDataFillerTest {
 
         // then
         assertThat(params)
-                .doesNotContainKey("ItemsReport")
-                .doesNotContainKey("ItemsMapParameter");
+                .doesNotContainKey("itemsModuleReport")
+                .doesNotContainKey("itemsModuleMapParameter");
     }
 
     @Nested
@@ -364,10 +364,10 @@ class JasperModularDataFillerTest {
 
             // then
             assertThat(params)
-                    .containsKey("FinancialReport")
-                    .containsKey("FinancialMapParameter")
-                    .containsKey("SummaryReport")
-                    .containsKey("SummaryMapParameter");
+                    .containsKey("financialModuleReport")
+                    .containsKey("financialModuleMapParameter")
+                    .containsKey("summaryModuleReport")
+                    .containsKey("summaryModuleMapParameter");
         }
 
         @Test
@@ -386,13 +386,13 @@ class JasperModularDataFillerTest {
             // then
             @SuppressWarnings("unchecked")
             Map<String, Object> financialParams =
-                    (Map<String, Object>) params.get("FinancialMapParameter");
-            assertThat(financialParams).containsKey("CurrencyReport");
+                    (Map<String, Object>) params.get("financialModuleMapParameter");
+            assertThat(financialParams).containsKey("currencyModuleReport");
 
             @SuppressWarnings("unchecked")
             Map<String, Object> summaryParams =
-                    (Map<String, Object>) params.get("SummaryMapParameter");
-            assertThat(summaryParams).containsKey("CurrencyReport");
+                    (Map<String, Object>) params.get("summaryModuleMapParameter");
+            assertThat(summaryParams).containsKey("currencyModuleReport");
         }
 
     }
@@ -411,9 +411,9 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then - the compiled report rides in the data source rows, not as a separate param
-            assertThat(params).containsKey("ItemsDataSource")
-                              .doesNotContainKey("ItemsReport");
-            assertThat(params.get("ItemsDataSource")).isInstanceOf(JRMapCollectionDataSource.class);
+            assertThat(params).containsKey("modulesDataSource")
+                              .doesNotContainKey("itemsModuleReport");
+            assertThat(params.get("modulesDataSource")).isInstanceOf(JRMapCollectionDataSource.class);
         }
 
         @Test
@@ -425,7 +425,7 @@ class JasperModularDataFillerTest {
 
             // when
             var dataSource =
-                    (JRMapCollectionDataSource) report.fillMapParameters().get("ItemsDataSource");
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("modulesDataSource");
 
             // then
             int rows = 0;
@@ -445,8 +445,8 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then
-            assertThat(params).doesNotContainKey("ItemsReport")
-                              .doesNotContainKey("ItemsDataSource");
+            assertThat(params).doesNotContainKey("itemsModuleReport")
+                              .doesNotContainKey("modulesDataSource");
         }
 
         @Test
@@ -458,7 +458,7 @@ class JasperModularDataFillerTest {
 
             // when
             var dataSource =
-                    (JRMapCollectionDataSource) report.fillMapParameters().get("MixedDataSource");
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("modulesDataSource");
 
             // then - each row carries its element's template, not the first element's
             JRDesignField reportField = new JRDesignField();
@@ -501,8 +501,8 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then
-            assertThat(params).doesNotContainKey("ToggleReport")
-                              .doesNotContainKey("ToggleMapParameter");
+            assertThat(params).doesNotContainKey("toggleModuleReport")
+                              .doesNotContainKey("toggleModuleMapParameter");
         }
 
         @Test
@@ -515,8 +515,8 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then
-            assertThat(params).containsKey("ToggleReport")
-                              .containsKey("ToggleMapParameter");
+            assertThat(params).containsKey("toggleModuleReport")
+                              .containsKey("toggleModuleMapParameter");
         }
 
         @Test
@@ -528,7 +528,7 @@ class JasperModularDataFillerTest {
 
             // when
             var dataSource =
-                    (JRMapCollectionDataSource) report.fillMapParameters().get("ToggleDataSource");
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("modulesDataSource");
 
             // then
             int rows = 0;
@@ -549,7 +549,7 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then
-            assertThat(params).doesNotContainKey("ToggleDataSource");
+            assertThat(params).doesNotContainKey("modulesDataSource");
         }
 
         @Test
@@ -561,7 +561,7 @@ class JasperModularDataFillerTest {
 
             // when
             var dataSource =
-                    (JRMapCollectionDataSource) report.fillMapParameters().get("ItemsDataSource");
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("modulesDataSource");
 
             // then
             int rows = 0;
@@ -581,7 +581,7 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then
-            assertThat(params).containsKey("ItemsDataSource")
+            assertThat(params).containsKey("modulesDataSource")
                               .doesNotContainKey("modules");
         }
 
@@ -594,7 +594,7 @@ class JasperModularDataFillerTest {
 
             // when
             var dataSource =
-                    (JRMapCollectionDataSource) report.fillMapParameters().get("RichDataSource");
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("modulesDataSource");
 
             // then
             assertThat(dataSource.next()).isTrue();

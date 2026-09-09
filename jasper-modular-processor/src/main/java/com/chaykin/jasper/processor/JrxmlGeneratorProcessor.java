@@ -13,6 +13,7 @@ import com.chaykin.jasper.processor.model.JrxmlDatasetField;
 import com.chaykin.jasper.processor.model.JrxmlParameter;
 import com.chaykin.jasper.processor.model.TemplateSpec;
 import net.sf.jasperreports.engine.JRException;
+import net.sf.jasperreports.engine.JRParameter;
 import net.sf.jasperreports.engine.data.JRAbstractBeanDataSource;
 import net.sf.jasperreports.engine.design.JRDesignBand;
 import net.sf.jasperreports.engine.design.JRDesignSection;
@@ -56,12 +57,14 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
@@ -77,6 +80,15 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     private static final String GET_PREFIX = "get";
 
     private static final String IS_PREFIX = "is";
+
+    private static final Map<String, String> WIRING_CLASSES = Map.of(
+            "Report", "net.sf.jasperreports.engine.JasperReport",
+            "MapParameter", "java.util.Map",
+            "DataSource", "net.sf.jasperreports.engine.JRDataSource");
+
+    private static final String DATA_SOURCE_SUFFIX = "DataSource";
+
+    private static final String DATASET_SUFFIX = "Dataset";
 
     private static final Set<String> JDK_PACKAGES = Set.of("java.", "javax.", "jdk.", "sun.");
 
@@ -168,7 +180,6 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         TemplateSpec spec = resolveTemplateSpec(classElement, subreport);
         GenerationMode mode = spec.mode();
 
-
         if (mode == GenerationMode.NONE) {
             note("Skipping generation for: " + classElement.getSimpleName());
             return;
@@ -186,7 +197,75 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             default -> throw new IllegalStateException("Unreachable: mode=" + mode);
         };
 
+        verifyTemplate(classElement, design, fields);
+
         writeOutput(classElement, templatePath, design, fields);
+    }
+
+    private void verifyTemplate(TypeElement classElement,
+                                JasperDesign design,
+                                List<JrxmlParameter> fields) {
+        Map<String, String> generated = fields.stream()
+                                              .collect(Collectors.toMap(JrxmlParameter::name,
+                                                                        JrxmlParameter::jrxmlClass,
+                                                                        (first, second) -> first));
+        Set<String> orphans = new LinkedHashSet<>();
+
+        for (JRParameter parameter: design.getParametersList()) {
+            if (parameter.isSystemDefined()) {
+                continue;
+            }
+            String expectedClass = generated.get(parameter.getName());
+
+            if (expectedClass == null) {
+                if (isGeneratedParameter(parameter)) {
+                    orphans.add(parameter.getName());
+                    error("Template declares '" + parameter.getName() + "' but no field of "
+                          + classElement.getSimpleName() + " produces it - left over from a "
+                          + "rename? Remove the parameter and the element that uses it.",
+                          classElement);
+                }
+            } else if (!expectedClass.equals(parameter.getValueClassName())) {
+                error("Template declares '" + parameter.getName() + "' as "
+                      + parameter.getValueClassName() + ", but the field produces "
+                      + expectedClass + " - update the class in the template.",
+                      classElement);
+            }
+        }
+
+        Set<String> generatedDatasets = fields.stream()
+                                              .map(JrxmlParameter::dataset)
+                                              .filter(Objects::nonNull)
+                                              .map(JrxmlDataset::name)
+                                              .collect(Collectors.toSet());
+
+        Set<String> orphanDatasets = orphans.stream()
+                                            .map(name -> name.endsWith(DATA_SOURCE_SUFFIX)
+                                                         ? name.substring(0, name.length()
+                                                                             - DATA_SOURCE_SUFFIX.length())
+                                                           + DATASET_SUFFIX
+                                                         : name)
+                                            .collect(Collectors.toSet());
+
+        design.getDatasetMap()
+              .keySet()
+              .stream()
+              .filter(name -> !generatedDatasets.contains(name))
+              .filter(orphanDatasets::contains)
+              .forEach(name -> error("Template declares dataset '" + name + "' but no field of "
+                                     + classElement.getSimpleName() + " produces it - remove it "
+                                     + "together with the component that runs it.",
+                                     classElement));
+    }
+
+    private boolean isGeneratedParameter(JRParameter parameter) {
+        if (JR_BEAN_COLLECTION_DS.equals(parameter.getValueClassName())) {
+            return true;
+        }
+        return WIRING_CLASSES.entrySet()
+                             .stream()
+                             .anyMatch(e -> parameter.getName().endsWith(e.getKey())
+                                            && e.getValue().equals(parameter.getValueClassName()));
     }
 
     private void writeOutput(TypeElement classElement,
@@ -289,25 +368,22 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         forEachField(classElement,
                      this::isJasperModularDataFiller,
                      f -> describeField(f, result));
-        reportDuplicatePrefixes(classElement, result);
+        reportDuplicateSubreportParameters(classElement, result);
         return result;
     }
 
-    private void reportDuplicatePrefixes(TypeElement classElement, List<JrxmlParameter> fields) {
+    private void reportDuplicateSubreportParameters(TypeElement classElement,
+                                                    List<JrxmlParameter> fields) {
         Set<String> seen = new HashSet<>();
-        fields.stream()
-              .filter(f -> f.subreportPrefix() != null)
-              .filter(f -> f.name().equals(f.subreportPrefix() + "Report")
-                           || f.name().equals(f.subreportPrefix() + "DataSource"))
-              .map(JrxmlParameter::subreportPrefix)
-              .filter(prefix -> !seen.add(prefix))
-              .distinct()
-              .forEach(prefix -> error(
-                      "Duplicate subreport prefix '" + prefix + "'. Two subreport fields resolve "
-                      + "to the same parameter names, so one of them would be lost. Give one a "
-                      + "distinct prefix, for example a subclass annotated "
-                      + "@JasperSubreport(templatePath = ..., prefix = \"Other\").",
-                      classElement));
+
+        for (JrxmlParameter field: fields) {
+            if (field.subreportPrefix() != null && !seen.add(field.name())) {
+                error("Duplicate subreport parameter '" + field.name()
+                      + "'. Two fields resolve to the same name, so one of them would be lost. "
+                      + "Rename one of the fields.",
+                      classElement);
+            }
+        }
     }
 
     /**
@@ -331,11 +407,8 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     private void describeField(VariableElement field, List<JrxmlParameter> result) {
         TypeElement fieldClass = asTypeElement(field.asType());
 
-        JasperSubreport subreportAnnotation = fieldClass != null
-                                              ? fieldClass.getAnnotation(JasperSubreport.class)
-                                              : null;
-        if (subreportAnnotation != null) {
-            result.addAll(describeSubreportParameters(fieldClass, subreportAnnotation));
+        if (fieldClass != null && fieldClass.getAnnotation(JasperSubreport.class) != null) {
+            result.addAll(describeSubreportParameters(field.getSimpleName().toString()));
             return;
         }
 
@@ -355,11 +428,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                                       null));
     }
 
-    private List<JrxmlParameter> describeSubreportParameters(TypeElement fieldClass,
-                                                             JasperSubreport annotation) {
-        String prefix = annotation.prefix().isEmpty()
-                        ? fieldClass.getSimpleName().toString()
-                        : annotation.prefix();
+    private List<JrxmlParameter> describeSubreportParameters(String prefix) {
         return List.of(
                 new JrxmlParameter(prefix + "Report",
                                    "net.sf.jasperreports.engine.JasperReport",
@@ -390,11 +459,8 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
             return;
         }
 
-        JasperSubreport subreportAnnotation = elementClass != null
-                                              ? elementClass.getAnnotation(JasperSubreport.class)
-                                              : null;
-        if (subreportAnnotation != null) {
-            describeSubreportListField(elementClass, subreportAnnotation, result);
+        if (elementClass != null && elementClass.getAnnotation(JasperSubreport.class) != null) {
+            describeSubreportListField(field.getSimpleName().toString(), result);
             return;
         }
 
@@ -428,13 +494,7 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
     /**
      * Describes a collection of {@link JasperSubreport} modules as a repeating subreport.
      */
-    private void describeSubreportListField(TypeElement elementClass,
-                                            JasperSubreport annotation,
-                                            List<JrxmlParameter> result) {
-        String prefix = annotation.prefix().isEmpty()
-                        ? elementClass.getSimpleName().toString()
-                        : annotation.prefix();
-
+    private void describeSubreportListField(String prefix, List<JrxmlParameter> result) {
         JrxmlDataset dataset = new JrxmlDataset(
                 prefix + "Dataset",
                 List.of(new JrxmlDatasetField(JasperModularDataFiller.SUBREPORT_PARAMS_FIELD,

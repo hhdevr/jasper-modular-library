@@ -24,12 +24,6 @@ public @interface JasperSubreport {
     String templatePath();
 
     /**
-     * Prefix for the injected {@code <prefix>Report} and {@code <prefix>MapParameter}
-     * parameters; defaults to the subreport's simple class name when empty.
-     */
-    String prefix() default "";
-
-    /**
      * Compile-time JRXML generation strategy.
      */
     GenerationMode mode() default GenerationMode.INJECT;

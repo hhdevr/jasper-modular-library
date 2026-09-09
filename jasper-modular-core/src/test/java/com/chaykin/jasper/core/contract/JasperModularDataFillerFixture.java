@@ -30,7 +30,7 @@ final class JasperModularDataFillerFixture {
 
     }
 
-    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Items")
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
     static class ItemsModule extends SubreportModule {
 
         String title;
@@ -55,7 +55,7 @@ final class JasperModularDataFillerFixture {
         BaseTypedSubreportReport(SubreportModule section) {this.section = section;}
     }
 
-    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Pojo")
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
     static class PojoModule {
 
         String title = "not a module";
@@ -207,7 +207,7 @@ final class JasperModularDataFillerFixture {
 
     }
 
-    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "SelfNode")
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
     static class SelfNodeModule extends SubreportModule {
 
         List<SelfNodeModule> children;
@@ -238,7 +238,7 @@ final class JasperModularDataFillerFixture {
 
     }
 
-    @JasperSubreport(templatePath = "/reports/currency_module.jrxml", prefix = "Currency")
+    @JasperSubreport(templatePath = "/reports/currency_module.jrxml")
     static class CurrencyModule extends SubreportModule {
 
         String currencyCode;
@@ -249,7 +249,7 @@ final class JasperModularDataFillerFixture {
         public boolean isEmpty() {return false;}
     }
 
-    @JasperSubreport(templatePath = "/reports/financial_module.jrxml", prefix = "Financial")
+    @JasperSubreport(templatePath = "/reports/financial_module.jrxml")
     static class FinancialModule extends SubreportModule {
 
         CurrencyModule currencyModule;
@@ -260,7 +260,7 @@ final class JasperModularDataFillerFixture {
         public boolean isEmpty() {return false;}
     }
 
-    @JasperSubreport(templatePath = "/reports/summary_module.jrxml", prefix = "Summary")
+    @JasperSubreport(templatePath = "/reports/summary_module.jrxml")
     static class SummaryModule extends SubreportModule {
 
         CurrencyModule currencyModule;
@@ -283,7 +283,7 @@ final class JasperModularDataFillerFixture {
         }
     }
 
-    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Toggle")
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
     static class ToggleModule extends SubreportModule {
 
         boolean empty;
@@ -310,7 +310,7 @@ final class JasperModularDataFillerFixture {
         ToggleListReport(List<ToggleModule> modules) {this.modules = modules;}
     }
 
-    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Rich")
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
     static class RichModule extends SubreportModule {
 
         String title;
@@ -333,14 +333,14 @@ final class JasperModularDataFillerFixture {
         RichListReport(List<RichModule> modules) {this.modules = modules;}
     }
 
-    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Mixed")
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
     abstract static class MixedBaseModule extends SubreportModule {
 
         @Override
         public boolean isEmpty() {return false;}
     }
 
-    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Mixed")
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
     static class MixedItemsModule extends MixedBaseModule {
 
         String title;
@@ -348,7 +348,7 @@ final class JasperModularDataFillerFixture {
         MixedItemsModule(String title) {this.title = title;}
     }
 
-    @JasperSubreport(templatePath = "/reports/other.jrxml", prefix = "Mixed")
+    @JasperSubreport(templatePath = "/reports/other.jrxml")
     static class MixedOtherModule extends MixedBaseModule {
 
         String note;
