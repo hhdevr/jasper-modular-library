@@ -221,8 +221,10 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                 if (isGeneratedParameter(parameter)) {
                     orphans.add(parameter.getName());
                     error("Template declares '" + parameter.getName() + "' but no field of "
-                          + classElement.getSimpleName() + " produces it - left over from a "
-                          + "rename? Remove the parameter and the element that uses it.",
+                          + classElement.getSimpleName() + " produces it. If the field was "
+                          + "renamed, rename the parameter and its $P{" + parameter.getName()
+                          + "} references in the template; if it was removed, delete the "
+                          + "parameter and the element that uses it.",
                           classElement);
                 }
             } else if (!expectedClass.equals(parameter.getValueClassName())) {
@@ -253,8 +255,9 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
               .filter(name -> !generatedDatasets.contains(name))
               .filter(orphanDatasets::contains)
               .forEach(name -> error("Template declares dataset '" + name + "' but no field of "
-                                     + classElement.getSimpleName() + " produces it - remove it "
-                                     + "together with the component that runs it.",
+                                     + classElement.getSimpleName() + " produces it. If the field "
+                                     + "was renamed, rename the dataset and the component that "
+                                     + "runs it; if it was removed, delete both.",
                                      classElement));
     }
 
@@ -486,6 +489,13 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                                                  columnWidth)
                                : null;
 
+        if (elementClass != null && dataset == null) {
+            warn("Collection element type " + elementClass.getSimpleName() + " exposes no "
+                 + "readable properties - no dataset or component generated for: "
+                 + field.getSimpleName() + ". Give the type JavaBean getters or fields.",
+                 field);
+        }
+
         result.add(new JrxmlParameter(field.getSimpleName().toString(),
                                       JR_BEAN_COLLECTION_DS,
                                       dataset));
@@ -524,21 +534,29 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         }
 
         Map<String, JrxmlDatasetField> fields = new LinkedHashMap<>();
-        forEachField(elementClass,
-                     t -> t.getQualifiedName().contentEquals(Object.class.getCanonicalName()),
-                     f -> {
-                         ExecutableElement accessor = findAccessor(f);
-                         if (f.getModifiers().contains(Modifier.STATIC) && accessor == null) {
-                             return;
-                         }
-                         String property = propertyName(f, accessor);
-                         TypeMirror propertyType = accessor != null
-                                                   ? accessor.getReturnType()
-                                                   : f.asType();
-                         fields.putIfAbsent(property,
-                                            new JrxmlDatasetField(property,
-                                                                  resolveJrxmlClass(propertyType)));
-                     });
+        if (elementClass.getKind() == ElementKind.INTERFACE) {
+            describeAccessorFields(elementClass, fields);
+        } else {
+            forEachField(elementClass,
+                         t -> t.getQualifiedName().contentEquals(Object.class.getCanonicalName()),
+                         f -> {
+                             ExecutableElement accessor = findAccessor(f);
+                             if (f.getModifiers().contains(Modifier.STATIC) && accessor == null) {
+                                 return;
+                             }
+                             String property = propertyName(f, accessor);
+                             TypeMirror propertyType = accessor != null
+                                                       ? accessor.getReturnType()
+                                                       : f.asType();
+                             fields.putIfAbsent(property,
+                                                new JrxmlDatasetField(property,
+                                                                      resolveJrxmlClass(propertyType)));
+                         });
+        }
+
+        if (fields.isEmpty()) {
+            return null;
+        }
 
         return new JrxmlDataset(name,
                                 List.copyOf(fields.values()),
@@ -546,10 +564,44 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                                 columnWidth);
     }
 
+    private void describeAccessorFields(TypeElement elementClass,
+                                        Map<String, JrxmlDatasetField> fields) {
+        ElementFilter.methodsIn(elementUtils.getAllMembers(elementClass))
+                     .stream()
+                     .filter(this::isAccessor)
+                     .forEach(accessor -> {
+                         String property = propertyName(accessor.getSimpleName().toString());
+                         fields.putIfAbsent(property,
+                                            new JrxmlDatasetField(
+                                                    property,
+                                                    resolveJrxmlClass(accessor.getReturnType())));
+                     });
+    }
+
+    private boolean isAccessor(ExecutableElement method) {
+        if (!method.getParameters().isEmpty()
+            || !method.getModifiers().contains(Modifier.PUBLIC)
+            || method.getModifiers().contains(Modifier.STATIC)
+            || method.getSimpleName().contentEquals("getClass")) {
+            return false;
+        }
+
+        String name = method.getSimpleName().toString();
+        if (name.startsWith(GET_PREFIX) && name.length() > GET_PREFIX.length()) {
+            return method.getReturnType().getKind() != TypeKind.VOID;
+        }
+        return name.startsWith(IS_PREFIX)
+               && name.length() > IS_PREFIX.length()
+               && method.getReturnType().getKind() == TypeKind.BOOLEAN;
+    }
+
     private String propertyName(VariableElement field, ExecutableElement accessor) {
-        String getter = accessor != null
-                        ? accessor.getSimpleName().toString()
-                        : getterNames(field).get(0);
+        return propertyName(accessor != null
+                            ? accessor.getSimpleName().toString()
+                            : getterNames(field).get(0));
+    }
+
+    private String propertyName(String getter) {
         String prefix = getter.startsWith(IS_PREFIX) ? IS_PREFIX : GET_PREFIX;
         return Introspector.decapitalize(getter.substring(prefix.length()));
     }
@@ -680,6 +732,10 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
     private void warn(String message) {
         messager.printMessage(Diagnostic.Kind.WARNING, message);
+    }
+
+    private void warn(String message, Element element) {
+        messager.printMessage(Diagnostic.Kind.WARNING, message, element);
     }
 
     private void error(String message, Element element) {
