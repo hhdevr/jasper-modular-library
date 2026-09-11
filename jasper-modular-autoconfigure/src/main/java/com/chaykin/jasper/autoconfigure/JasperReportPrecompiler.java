@@ -100,7 +100,7 @@ public class JasperReportPrecompiler implements ApplicationRunner {
     }
 
     /**
-     * Compiles the JRXML template at the given classpath path and stores it in the cache;
+     * Compiles the JRXML template and stores it in the cache;
      * logs and rethrows on failure (fail-fast).
      */
     private void compileAndCache(ReportTemplate template) {

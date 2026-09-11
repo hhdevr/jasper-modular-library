@@ -10,6 +10,10 @@ import java.lang.annotation.Target;
  * Marks a class as a JasperReports subreport module; the class must extend
  * {@link com.chaykin.jasper.core.model.SubreportModule}.
  *
+ * <p>Parameter names come from the field: a field {@code items} of this type is passed as
+ * {@code itemsReport} and {@code itemsMapParameter}; a field {@code items} holding a collection
+ * of this type is passed as {@code itemsDataSource}, iterated by the dataset {@code itemsDataset}.
+ *
  * @see com.chaykin.jasper.core.model.SubreportModule
  * @see JasperModularReport
  */
@@ -30,8 +34,8 @@ public @interface JasperSubreport {
     GenerationMode mode() default GenerationMode.INJECT;
 
     /**
-     * Page orientation of the blank template used during JRXML generation; has no
-     * effect when an existing template is already present on the classpath.
+     * Page orientation of the blank template used when generating a new JRXML; has no
+     * effect in {@link GenerationMode#INJECT} mode when the template already exists.
      */
     PageOrientation orientation() default PageOrientation.PORTRAIT;
 }

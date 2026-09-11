@@ -5,6 +5,7 @@ import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ChildRepo
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.CollectionReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.CompanyReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.CurrencyModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.FieldNameReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.FinancialModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.IgnoredFieldReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ItemsModule;
@@ -14,7 +15,6 @@ import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedList
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedOtherModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MultiSubreportReport;
-import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NoPrefixReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullSubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullableReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.OtherModule;
@@ -255,15 +255,15 @@ class JasperModularDataFillerTest {
         @DisplayName("parameter name comes from the field, not from the module type")
         void subreportField_isNamedAfterFieldNotType() {
             // given
-            var report = new NoPrefixReport(new OtherModule("note"));
+            var report = new FieldNameReport(new OtherModule("note"));
 
             // when
             Map<String, Object> params = report.fillMapParameters();
 
             // then
             assertThat(params)
-                    .containsKey("otherModuleReport")
-                    .containsKey("otherModuleMapParameter");
+                    .containsKey("appendixReport")
+                    .containsKey("appendixMapParameter");
         }
 
         @Test
@@ -402,7 +402,7 @@ class JasperModularDataFillerTest {
     class SubreportLists {
 
         @Test
-        @DisplayName("List of subreport modules produces a single <prefix>DataSource of element maps")
+        @DisplayName("List of subreport modules produces a single <field>DataSource of element maps")
         void listOfSubreportModules_producesRepeatingSubreport() {
             // given
             var report = new SubreportListReport(List.of(new ItemsModule("a"), new ItemsModule("b")));

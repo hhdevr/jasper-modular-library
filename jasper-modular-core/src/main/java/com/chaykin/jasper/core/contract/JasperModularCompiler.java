@@ -59,13 +59,20 @@ public interface JasperModularCompiler {
      * Returns the classpath JRXML template path of this module, resolved by
      * {@link #templatePathOf(Class)}.
      *
-     * @throws JasperModularException if the hierarchy carries no report annotation, or a class
-     *                                in it carries both
+     * @throws JasperModularException if the hierarchy carries no report annotation, or the
+     *                                nearest annotated class carries both
      */
     default String getTemplatePath() {
         return templatePathOf(getClass());
     }
 
+    /**
+     * Returns the template path from the {@link JasperModularReport} or {@link JasperSubreport}
+     * annotation of {@code type} or, if it has none, of its nearest annotated superclass.
+     *
+     * @throws JasperModularException if the hierarchy carries no report annotation, or the
+     *                                nearest annotated class carries both
+     */
     static String templatePathOf(Class<?> type) {
         for (Class<?> current = type; current != null; current = current.getSuperclass()) {
             JasperModularReport root = current.getDeclaredAnnotation(JasperModularReport.class);

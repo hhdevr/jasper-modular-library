@@ -78,6 +78,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Annotation processor that generates and updates JRXML report templates at compile time.
+ * Existing templates are checked against the class fields.
  */
 @SupportedAnnotationTypes({
         "com.chaykin.jasper.core.annotation.JasperModularReport",

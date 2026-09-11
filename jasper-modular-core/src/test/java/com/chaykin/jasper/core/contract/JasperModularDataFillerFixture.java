@@ -143,12 +143,12 @@ final class JasperModularDataFillerFixture {
 
     }
 
-    @JasperModularReport(templatePath = "/reports/prefix.jrxml")
-    static class NoPrefixReport extends ModularReport {
+    @JasperModularReport(templatePath = "/reports/field_name.jrxml")
+    static class FieldNameReport extends ModularReport {
 
-        OtherModule otherModule;
+        OtherModule appendix;
 
-        NoPrefixReport(OtherModule module) {this.otherModule = module;}
+        FieldNameReport(OtherModule module) {this.appendix = module;}
     }
 
     @JasperModularReport(templatePath = "/reports/mixed.jrxml")
