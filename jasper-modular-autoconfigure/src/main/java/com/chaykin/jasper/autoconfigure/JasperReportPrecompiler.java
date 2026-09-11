@@ -12,8 +12,9 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 
-import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Precompiles all discovered JRXML templates into {@link JasperModularCompiler#CACHE} at startup.
@@ -66,15 +67,13 @@ public class JasperReportPrecompiler implements ApplicationRunner {
         templates.forEach(this::compileAndCache);
 
         long ms = Math.round((System.nanoTime() - totalStart) / 1_000_000.0);
-        log.info("Precompilation complete - {}/{} templates compiled in {} ms",
-                 templates.size(),
-                 templates.size(),
-                 ms);
+        log.info("Precompilation complete - {} templates compiled in {} ms", templates.size(), ms);
     }
 
     /**
-     * Collects the template paths of all {@link JasperModularReport} and {@link JasperSubreport}
-     * classes in the configured base package.
+     * Collects the distinct template paths of all {@link JasperModularReport} and
+     * {@link JasperSubreport} classes in the configured base package, including subclasses that
+     * inherit the annotation.
      */
     private List<ReportTemplate> scanTemplates() {
         ClassPathScanningCandidateComponentProvider scanner =
@@ -83,7 +82,7 @@ public class JasperReportPrecompiler implements ApplicationRunner {
         scanner.addIncludeFilter(new AnnotationTypeFilter(JasperModularReport.class));
         scanner.addIncludeFilter(new AnnotationTypeFilter(JasperSubreport.class));
 
-        List<ReportTemplate> templates = new ArrayList<>();
+        Map<String, ReportTemplate> templates = new LinkedHashMap<>();
 
         for (BeanDefinition beanDefinition: scanner.findCandidateComponents(properties.getBasePackage())) {
             try {
@@ -91,13 +90,13 @@ public class JasperReportPrecompiler implements ApplicationRunner {
                 String templatePath = JasperModularCompiler.templatePathOf(clazz);
 
                 if (!templatePath.isEmpty()) {
-                    templates.add(new ReportTemplate(clazz, templatePath));
+                    templates.putIfAbsent(templatePath, new ReportTemplate(clazz, templatePath));
                 }
             } catch (ClassNotFoundException e) {
                 log.error("Cannot load class: {}", beanDefinition.getBeanClassName());
             }
         }
-        return templates;
+        return List.copyOf(templates.values());
     }
 
     /**
@@ -116,8 +115,4 @@ public class JasperReportPrecompiler implements ApplicationRunner {
         }
     }
 
-    /** A report class paired with the JRXML path declared on its annotation. */
-    private record ReportTemplate(Class<?> type, String path) {
-
-    }
 }
