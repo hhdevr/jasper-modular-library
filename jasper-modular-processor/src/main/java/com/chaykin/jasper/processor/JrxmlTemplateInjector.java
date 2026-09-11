@@ -36,6 +36,9 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 
+import static com.chaykin.jasper.core.contract.JasperModularDataFiller.MAP_PARAMETER_SUFFIX;
+import static com.chaykin.jasper.core.contract.JasperModularDataFiller.REPORT_SUFFIX;
+
 /**
  * Idempotently injects missing elements derived from annotated class fields into a
  * {@link JasperDesign} and writes the result to an output stream.
@@ -308,7 +311,7 @@ public class JrxmlTemplateInjector {
     }
 
     private boolean subreportBandExists(JRDesignSection section, String prefix) {
-        String expectedExpression = "$P{" + prefix + "Report}";
+        String expectedExpression = "$P{" + prefix + REPORT_SUFFIX + "}";
         return Arrays.stream(section.getBands())
                      .flatMap(b -> Arrays.stream(b.getElements()))
                      .filter(e -> e instanceof JRDesignSubreport)
@@ -323,8 +326,8 @@ public class JrxmlTemplateInjector {
         band.setSplitType(SplitTypeEnum.STRETCH);
 
         band.addElement(createSubreport(columnWidth,
-                                        "$P{" + prefix + "MapParameter}",
-                                        "$P{" + prefix + "Report}"));
+                                        "$P{" + prefix + MAP_PARAMETER_SUFFIX + "}",
+                                        "$P{" + prefix + REPORT_SUFFIX + "}"));
         return band;
     }
 

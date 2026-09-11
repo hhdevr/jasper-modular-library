@@ -31,6 +31,18 @@ public class JasperModularDataFiller {
     /** JRXML field name carrying each element's own compiled report inside a generated subreport list. */
     public static final String SUBREPORT_REPORT_FIELD = "report";
 
+    /** Suffix of the parameter carrying a subreport's compiled report: {@code <field>Report}. */
+    public static final String REPORT_SUFFIX = "Report";
+
+    /** Suffix of the parameter carrying a subreport's own parameters: {@code <field>MapParameter}. */
+    public static final String MAP_PARAMETER_SUFFIX = "MapParameter";
+
+    /** Suffix of the parameter carrying the rows of a subreport list: {@code <field>DataSource}. */
+    public static final String DATA_SOURCE_SUFFIX = "DataSource";
+
+    /** Suffix of the JRXML dataset that iterates a subreport list: {@code <field>Dataset}. */
+    public static final String DATASET_SUFFIX = "Dataset";
+
     /**
      * Traverses all declared fields up the class hierarchy and builds the JasperReports
      * parameters map.
@@ -81,8 +93,7 @@ public class JasperModularDataFiller {
             }
 
             Class<?> fieldType = field.getType();
-            JasperSubreport annotation = fieldType.getAnnotation(JasperSubreport.class);
-            if (annotation != null) {
+            if (fieldType.isAnnotationPresent(JasperSubreport.class)) {
                 requireModule(fieldType, field.getName());
                 if (value instanceof SubreportModule module && module.isEmpty()) {
                     return;
@@ -96,7 +107,7 @@ public class JasperModularDataFiller {
                         + "Field: " + field.getName());
             }
 
-            if (Collection.class.isAssignableFrom(field.getType())) {
+            if (Collection.class.isAssignableFrom(fieldType)) {
                 putCollectionField(field, (Collection<?>) value, params, visited);
             } else {
                 putParameter(field.getName(), value, params);
@@ -171,12 +182,12 @@ public class JasperModularDataFiller {
                               Map<String, Object> params,
                               Set<Class<?>> visited) {
 
-        requireFreeName(params, prefix + "Report");
+        requireFreeName(params, prefix + REPORT_SUFFIX);
 
         Map<String, Object> childParams = new HashMap<>();
         ((JasperModularDataFiller) module).fillMapParameters(childParams, visited);
-        params.put(prefix + "Report", module.compileReport());
-        params.put(prefix + "MapParameter", childParams);
+        params.put(prefix + REPORT_SUFFIX, module.compileReport());
+        params.put(prefix + MAP_PARAMETER_SUFFIX, childParams);
     }
 
     /** Renders a collection of {@link JasperSubreport}-annotated modules as a repeating subreport. */
@@ -203,8 +214,8 @@ public class JasperModularDataFiller {
         if (rows.isEmpty()) {
             return;
         }
-        requireFreeName(params, prefix + "DataSource");
-        params.put(prefix + "DataSource", new JRMapCollectionDataSource(rows));
+        requireFreeName(params, prefix + DATA_SOURCE_SUFFIX);
+        params.put(prefix + DATA_SOURCE_SUFFIX, new JRMapCollectionDataSource(rows));
     }
 
     /** Adds a scalar parameter, skipping {@code null} values. */

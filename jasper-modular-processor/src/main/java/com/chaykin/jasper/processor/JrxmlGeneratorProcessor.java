@@ -12,9 +12,12 @@ import com.chaykin.jasper.processor.model.JrxmlDataset;
 import com.chaykin.jasper.processor.model.JrxmlDatasetField;
 import com.chaykin.jasper.processor.model.JrxmlParameter;
 import com.chaykin.jasper.processor.model.TemplateSpec;
+import net.sf.jasperreports.engine.JRDataSource;
 import net.sf.jasperreports.engine.JRException;
 import net.sf.jasperreports.engine.JRParameter;
+import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.data.JRAbstractBeanDataSource;
+import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
 import net.sf.jasperreports.engine.design.JRDesignBand;
 import net.sf.jasperreports.engine.design.JRDesignSection;
 import net.sf.jasperreports.engine.design.JasperDesign;
@@ -66,6 +69,10 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static com.chaykin.jasper.core.contract.JasperModularDataFiller.DATASET_SUFFIX;
+import static com.chaykin.jasper.core.contract.JasperModularDataFiller.DATA_SOURCE_SUFFIX;
+import static com.chaykin.jasper.core.contract.JasperModularDataFiller.MAP_PARAMETER_SUFFIX;
+import static com.chaykin.jasper.core.contract.JasperModularDataFiller.REPORT_SUFFIX;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -81,19 +88,23 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
     private static final String IS_PREFIX = "is";
 
+    private static final String JASPER_REPORT_CLASS = JasperReport.class.getName();
+
+    private static final String MAP_CLASS = Map.class.getName();
+
+    private static final String DATA_SOURCE_CLASS = JRDataSource.class.getName();
+
     private static final Map<String, String> WIRING_CLASSES = Map.of(
-            "Report", "net.sf.jasperreports.engine.JasperReport",
-            "MapParameter", "java.util.Map",
-            "DataSource", "net.sf.jasperreports.engine.JRDataSource");
-
-    private static final String DATA_SOURCE_SUFFIX = "DataSource";
-
-    private static final String DATASET_SUFFIX = "Dataset";
+            REPORT_SUFFIX,
+            JASPER_REPORT_CLASS,
+            MAP_PARAMETER_SUFFIX,
+            MAP_CLASS,
+            DATA_SOURCE_SUFFIX,
+            DATA_SOURCE_CLASS);
 
     private static final Set<String> JDK_PACKAGES = Set.of("java.", "javax.", "jdk.", "sun.");
 
-    private static final String JR_BEAN_COLLECTION_DS =
-            "net.sf.jasperreports.engine.data.JRBeanCollectionDataSource";
+    private static final String JR_BEAN_COLLECTION_DS = JRBeanCollectionDataSource.class.getName();
 
     private Filer filer;
 
@@ -433,12 +444,12 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
 
     private List<JrxmlParameter> describeSubreportParameters(String prefix) {
         return List.of(
-                new JrxmlParameter(prefix + "Report",
-                                   "net.sf.jasperreports.engine.JasperReport",
+                new JrxmlParameter(prefix + REPORT_SUFFIX,
+                                   JASPER_REPORT_CLASS,
                                    null,
                                    prefix),
-                new JrxmlParameter(prefix + "MapParameter",
-                                   "java.util.Map",
+                new JrxmlParameter(prefix + MAP_PARAMETER_SUFFIX,
+                                   MAP_CLASS,
                                    null)
         );
     }
@@ -506,16 +517,16 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
      */
     private void describeSubreportListField(String prefix, List<JrxmlParameter> result) {
         JrxmlDataset dataset = new JrxmlDataset(
-                prefix + "Dataset",
+                prefix + DATASET_SUFFIX,
                 List.of(new JrxmlDatasetField(JasperModularDataFiller.SUBREPORT_PARAMS_FIELD,
-                                              "java.util.Map"),
+                                              MAP_CLASS),
                         new JrxmlDatasetField(JasperModularDataFiller.SUBREPORT_REPORT_FIELD,
-                                              "net.sf.jasperreports.engine.JasperReport")),
+                                              JASPER_REPORT_CLASS)),
                 CollectionComponentType.LIST,
                 JasperCollection.DEFAULT_COLUMN_WIDTH);
 
-        result.add(new JrxmlParameter(prefix + "DataSource",
-                                      "net.sf.jasperreports.engine.JRDataSource",
+        result.add(new JrxmlParameter(prefix + DATA_SOURCE_SUFFIX,
+                                      DATA_SOURCE_CLASS,
                                       dataset,
                                       prefix));
     }
