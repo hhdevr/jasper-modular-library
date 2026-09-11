@@ -95,10 +95,9 @@ public class JasperModularDataFiller {
             Class<?> fieldType = field.getType();
             if (fieldType.isAnnotationPresent(JasperSubreport.class)) {
                 requireModule(fieldType, field.getName());
-                if (value instanceof SubreportModule module && module.isEmpty()) {
-                    return;
+                if (value instanceof SubreportModule module && !module.isEmpty()) {
+                    putSubreport(field.getName(), module, params, visited);
                 }
-                putSubreport(field.getName(), (JasperModularCompiler) value, params, visited);
                 return;
             }
             if (JasperModularDataFiller.class.isAssignableFrom(fieldType)) {
@@ -178,19 +177,18 @@ public class JasperModularDataFiller {
     }
 
     private void putSubreport(String prefix,
-                              JasperModularCompiler module,
+                              SubreportModule module,
                               Map<String, Object> params,
                               Set<Class<?>> visited) {
 
         requireFreeName(params, prefix + REPORT_SUFFIX);
 
-        Map<String, Object> childParams = new HashMap<>();
-        ((JasperModularDataFiller) module).fillMapParameters(childParams, visited);
+        Map<String, Object> childParams = childParameters(module, visited);
         params.put(prefix + REPORT_SUFFIX, module.compileReport());
         params.put(prefix + MAP_PARAMETER_SUFFIX, childParams);
     }
 
-    /** Renders a collection of {@link JasperSubreport}-annotated modules as a repeating subreport. */
+    /** Builds the data source of a repeating subreport from a collection of subreport modules. */
     private void putSubreportList(String prefix,
                                   Collection<?> data,
                                   Map<String, Object> params,
@@ -201,21 +199,26 @@ public class JasperModularDataFiller {
 
         List<Map<String, ?>> rows = new ArrayList<>();
         for (Object element: data) {
-            if (element == null || (element instanceof SubreportModule module && module.isEmpty())) {
+            SubreportModule module = (SubreportModule) element;
+            if (module == null || module.isEmpty()) {
                 continue;
             }
-            Map<String, Object> childParams = new HashMap<>();
-            ((JasperModularDataFiller) element).fillMapParameters(childParams, visited);
             rows.add(Map.of(SUBREPORT_PARAMS_FIELD,
-                            childParams,
+                            childParameters(module, visited),
                             SUBREPORT_REPORT_FIELD,
-                            ((JasperModularCompiler) element).compileReport()));
+                            module.compileReport()));
         }
         if (rows.isEmpty()) {
             return;
         }
         requireFreeName(params, prefix + DATA_SOURCE_SUFFIX);
         params.put(prefix + DATA_SOURCE_SUFFIX, new JRMapCollectionDataSource(rows));
+    }
+
+    private Map<String, Object> childParameters(JasperModularDataFiller module, Set<Class<?>> visited) {
+        Map<String, Object> childParams = new HashMap<>();
+        module.fillMapParameters(childParams, visited);
+        return childParams;
     }
 
     /** Adds a scalar parameter, skipping {@code null} values. */
