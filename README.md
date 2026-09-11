@@ -81,7 +81,7 @@ Add the starter — it pulls in everything except JasperReports itself, which yo
 <dependency>
     <groupId>io.github.hhdevr</groupId>
     <artifactId>jasper-modular-starter</artifactId>
-    <version>2.0.1</version>
+    <version>3.0.0</version>
 </dependency>
 
 <dependency>
@@ -103,7 +103,7 @@ JasperReports version alongside it so the processor can use the correct API at c
             <path>
                 <groupId>io.github.hhdevr</groupId>
                 <artifactId>jasper-modular-processor</artifactId>
-                <version>2.0.1</version>
+                <version>3.0.0</version>
             </path>
             <path>
                 <groupId>net.sf.jasperreports</groupId>
