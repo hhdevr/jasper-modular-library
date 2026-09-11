@@ -5,9 +5,13 @@ package com.chaykin.jasper.core.annotation;
  */
 public enum PageOrientation {
 
-    /** Portrait orientation (default). */
+    /**
+     * Portrait orientation (default).
+     */
     PORTRAIT,
 
-    /** Landscape orientation. */
+    /**
+     * Landscape orientation.
+     */
     LANDSCAPE
 }

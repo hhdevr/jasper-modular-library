@@ -99,8 +99,7 @@ public class JrxmlTemplateInjector {
             }
 
             if (design.getDatasetMap().containsKey(field.dataset().name())) {
-                note("Dataset already exists - skipping: "
-                                      + field.dataset().name());
+                note("Dataset already exists - skipping: " + field.dataset().name());
                 continue;
             }
 
@@ -393,7 +392,7 @@ public class JrxmlTemplateInjector {
             // JR7: ComponentKey removed, namespace inferred automatically - expected path.
         } catch (ReflectiveOperationException e) {
             warn("Could not set ComponentKey for " + componentName
-                                  + ": " + e.getMessage());
+                 + ": " + e.getMessage());
         }
     }
 

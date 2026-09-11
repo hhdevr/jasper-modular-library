@@ -25,22 +25,34 @@ import java.util.Set;
  */
 public class JasperModularDataFiller {
 
-    /** JRXML field name carrying each element's parameter map inside a generated subreport list. */
+    /**
+     * JRXML field name carrying each element's parameter map inside a generated subreport list.
+     */
     public static final String SUBREPORT_PARAMS_FIELD = "params";
 
-    /** JRXML field name carrying each element's own compiled report inside a generated subreport list. */
+    /**
+     * JRXML field name carrying each element's own compiled report inside a generated subreport list.
+     */
     public static final String SUBREPORT_REPORT_FIELD = "report";
 
-    /** Suffix of the parameter carrying a subreport's compiled report: {@code <field>Report}. */
+    /**
+     * Suffix of the parameter carrying a subreport's compiled report: {@code <field>Report}.
+     */
     public static final String REPORT_SUFFIX = "Report";
 
-    /** Suffix of the parameter carrying a subreport's own parameters: {@code <field>MapParameter}. */
+    /**
+     * Suffix of the parameter carrying a subreport's own parameters: {@code <field>MapParameter}.
+     */
     public static final String MAP_PARAMETER_SUFFIX = "MapParameter";
 
-    /** Suffix of the parameter carrying the rows of a subreport list: {@code <field>DataSource}. */
+    /**
+     * Suffix of the parameter carrying the rows of a subreport list: {@code <field>DataSource}.
+     */
     public static final String DATA_SOURCE_SUFFIX = "DataSource";
 
-    /** Suffix of the JRXML dataset that iterates a subreport list: {@code <field>Dataset}. */
+    /**
+     * Suffix of the JRXML dataset that iterates a subreport list: {@code <field>Dataset}.
+     */
     public static final String DATASET_SUFFIX = "Dataset";
 
     /**
@@ -188,7 +200,9 @@ public class JasperModularDataFiller {
         params.put(prefix + MAP_PARAMETER_SUFFIX, childParams);
     }
 
-    /** Builds the data source of a repeating subreport from a collection of subreport modules. */
+    /**
+     * Builds the data source of a repeating subreport from a collection of subreport modules.
+     */
     private void putSubreportList(String prefix,
                                   Collection<?> data,
                                   Map<String, Object> params,
@@ -221,14 +235,18 @@ public class JasperModularDataFiller {
         return childParams;
     }
 
-    /** Adds a scalar parameter, skipping {@code null} values. */
+    /**
+     * Adds a scalar parameter, skipping {@code null} values.
+     */
     protected void putParameter(String key, Object value, Map<String, Object> params) {
         if (value != null) {
             params.put(key, value);
         }
     }
 
-    /** Wraps a non-empty collection in a {@link JRBeanCollectionDataSource} and stores it as a parameter. */
+    /**
+     * Wraps a non-empty collection in a {@link JRBeanCollectionDataSource} and stores it as a parameter.
+     */
     protected void putCollection(String key, Collection<?> data, Map<String, Object> params) {
         if (data != null && !data.isEmpty()) {
             params.put(key, new JRBeanCollectionDataSource(data));

@@ -5,9 +5,13 @@ package com.chaykin.jasper.core.annotation;
  */
 public enum CollectionComponentType {
 
-    /** Generates a JasperReports {@code list} component. */
+    /**
+     * Generates a JasperReports {@code list} component.
+     */
     LIST,
 
-    /** Generates a JasperReports {@code table} component (the default). */
+    /**
+     * Generates a JasperReports {@code table} component (the default).
+     */
     TABLE
 }

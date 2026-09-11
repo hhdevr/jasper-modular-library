@@ -19,7 +19,9 @@ import static java.text.MessageFormat.format;
  */
 public interface JasperModularCompiler {
 
-    /** Thread-safe cache of compiled reports, keyed by JRXML template path. */
+    /**
+     * Thread-safe cache of compiled reports, keyed by JRXML template path.
+     */
     Map<String, JasperReport> CACHE = new ConcurrentHashMap<>();
 
     /**
@@ -96,7 +98,9 @@ public interface JasperModularCompiler {
                 + type.getSimpleName());
     }
 
-    /** Returns the simple class name of this module, used in error messages and logging. */
+    /**
+     * Returns the simple class name of this module, used in error messages and logging.
+     */
     default String getModuleClassName() {
         return getClass().getSimpleName();
     }
