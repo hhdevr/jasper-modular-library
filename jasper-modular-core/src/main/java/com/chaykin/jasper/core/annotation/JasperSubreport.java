@@ -19,7 +19,8 @@ import java.lang.annotation.Target;
 public @interface JasperSubreport {
 
     /**
-     * Classpath-relative path to the JRXML template; must start with {@code /}.
+     * Classpath path to the JRXML template, read from the classpath root with or without
+     * a leading {@code /}.
      */
     String templatePath();
 

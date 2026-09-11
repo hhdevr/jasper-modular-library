@@ -33,12 +33,14 @@ public interface JasperModularCompiler {
 
     /**
      * Compiles the JRXML at the given classpath path and caches it, resolving the resource
-     * against {@code moduleType}.
+     * against {@code moduleType}. The path is read from the classpath root with or without
+     * a leading {@code /}; both forms share one cache entry.
      *
      * @throws JasperModularException if the JRXML resource is not found or compilation fails
      */
     static JasperReport compileReport(Class<?> moduleType, String templatePath) {
-        return CACHE.computeIfAbsent(templatePath, path -> {
+        String absolutePath = templatePath.startsWith("/") ? templatePath : "/" + templatePath;
+        return CACHE.computeIfAbsent(absolutePath, path -> {
             try (InputStream stream = moduleType.getResourceAsStream(path)) {
                 if (stream == null) {
                     throw new JasperModularException(
@@ -54,36 +56,37 @@ public interface JasperModularCompiler {
     }
 
     /**
-     * Returns the classpath-relative JRXML template path, resolved from the
-     * {@link JasperModularReport} or {@link JasperSubreport} annotation.
+     * Returns the classpath JRXML template path of this module, resolved by
+     * {@link #templatePathOf(Class)}.
      *
-     * @throws JasperModularException if the implementing class has neither annotation
+     * @throws JasperModularException if the hierarchy carries no report annotation, or a class
+     *                                in it carries both
      */
     default String getTemplatePath() {
-        JasperModularReport root = getClass().getDeclaredAnnotation(JasperModularReport.class);
-        JasperSubreport subreport = getClass().getDeclaredAnnotation(JasperSubreport.class);
+        return templatePathOf(getClass());
+    }
 
-        if (root != null && subreport != null) {
-            throw new JasperModularException(
-                    "A class cannot be annotated with both @JasperModularReport and "
-                    + "@JasperSubreport: " + getClass().getName());
-        }
+    static String templatePathOf(Class<?> type) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            JasperModularReport root = current.getDeclaredAnnotation(JasperModularReport.class);
+            JasperSubreport subreport = current.getDeclaredAnnotation(JasperSubreport.class);
 
-        if (root == null && subreport == null) {
-            root = getClass().getAnnotation(JasperModularReport.class);
-            subreport = getClass().getAnnotation(JasperSubreport.class);
-        }
-
-        if (root != null) {
-            return root.templatePath();
-        }
-        if (subreport != null) {
-            return subreport.templatePath();
+            if (root != null && subreport != null) {
+                throw new JasperModularException(
+                        "A class cannot be annotated with both @JasperModularReport and "
+                        + "@JasperSubreport: " + current.getName());
+            }
+            if (root != null) {
+                return root.templatePath();
+            }
+            if (subreport != null) {
+                return subreport.templatePath();
+            }
         }
 
         throw new JasperModularException(
                 "No @JasperModularReport or @JasperSubreport annotation found on: "
-                + getClass().getSimpleName());
+                + type.getSimpleName());
     }
 
     /** Returns the simple class name of this module, used in error messages and logging. */

@@ -23,8 +23,8 @@ import java.lang.annotation.Target;
 public @interface JasperModularReport {
 
     /**
-     * Classpath-relative path to the JRXML template; must start with {@code /}
-     * (e.g. {@code "/reports/invoice.jrxml"}).
+     * Classpath path to the JRXML template, read from the classpath root with or without
+     * a leading {@code /} (e.g. {@code "/reports/invoice.jrxml"}).
      */
     String templatePath();
 
