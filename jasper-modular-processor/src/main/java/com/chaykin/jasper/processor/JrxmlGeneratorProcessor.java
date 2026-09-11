@@ -458,7 +458,8 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         if (elementType == null) {
             warn("Collection field has no resolvable element type - nothing generated for: "
                  + field.getSimpleName()
-                 + ". Declare a concrete element type, for example List<LineItem>.");
+                 + ". Declare a concrete element type, for example List<LineItem>.",
+                 field);
             return;
         }
 
@@ -652,10 +653,8 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         List<String> getters = getterNames(field);
         return ElementFilter.methodsIn(elementUtils.getAllMembers(owner))
                             .stream()
-                            .filter(m -> m.getParameters().isEmpty()
-                                         && m.getModifiers().contains(Modifier.PUBLIC)
-                                         && !m.getModifiers().contains(Modifier.STATIC)
-                                         && getters.contains(m.getSimpleName().toString()))
+                            .filter(this::isAccessor)
+                            .filter(m -> getters.contains(m.getSimpleName().toString()))
                             .min(Comparator.comparingInt(
                                     m -> getters.indexOf(m.getSimpleName().toString())))
                             .orElse(null);
