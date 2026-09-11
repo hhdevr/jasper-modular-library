@@ -7,8 +7,10 @@ import java.lang.annotation.Target;
 
 /**
  * Excludes a report field from JRXML parameter generation and data filling.
+ * On a collection element class, excludes the field from the generated dataset.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
 public @interface JasperIgnore {
+
 }

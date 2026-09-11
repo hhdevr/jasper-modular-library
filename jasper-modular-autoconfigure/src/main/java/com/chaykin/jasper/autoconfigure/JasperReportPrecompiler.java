@@ -4,8 +4,6 @@ import com.chaykin.jasper.core.annotation.JasperModularReport;
 import com.chaykin.jasper.core.annotation.JasperSubreport;
 import com.chaykin.jasper.core.contract.JasperModularCompiler;
 import com.chaykin.jasper.core.exception.JasperModularException;
-import net.sf.jasperreports.engine.JRException;
-import net.sf.jasperreports.engine.JasperCompileManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -14,10 +12,9 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Precompiles all discovered JRXML templates into {@link JasperModularCompiler#CACHE} at startup.
@@ -37,6 +34,8 @@ public class JasperReportPrecompiler implements ApplicationRunner {
      */
     @Override
     public void run(ApplicationArguments args) {
+        JasperModularCompiler.CACHE.clear();
+
         if (!properties.isPrecompileEnabled()) {
             log.info("JasperReport precompilation is disabled");
             return;
@@ -53,82 +52,67 @@ public class JasperReportPrecompiler implements ApplicationRunner {
             return;
         }
 
-        List<String> paths = scanTemplatePaths();
+        List<ReportTemplate> templates = scanTemplates();
 
-        if (paths.isEmpty()) {
+        if (templates.isEmpty()) {
             log.warn("No @JasperModularReport or @JasperSubreport classes found in package: {}. " +
                      "Check jasper.modular.base-package in your configuration.",
                      properties.getBasePackage());
             return;
         }
 
-        log.info("Precompiling {} JRXML templates...", paths.size());
+        log.info("Precompiling {} JRXML templates...", templates.size());
         long totalStart = System.nanoTime();
 
-        paths.forEach(this::compileAndCache);
+        templates.forEach(this::compileAndCache);
 
         long ms = Math.round((System.nanoTime() - totalStart) / 1_000_000.0);
-        log.info("Precompilation complete - {}/{} templates compiled in {} ms",
-                 paths.size(),
-                 paths.size(),
-                 ms);
+        log.info("Precompilation complete - {} templates compiled in {} ms", templates.size(), ms);
     }
 
     /**
-     * Collects the template paths of all {@link JasperModularReport} and {@link JasperSubreport}
-     * classes in the configured base package.
+     * Collects the distinct template paths of all {@link JasperModularReport} and
+     * {@link JasperSubreport} classes in the configured base package, including subclasses that
+     * inherit the annotation.
      */
-    private List<String> scanTemplatePaths() {
+    private List<ReportTemplate> scanTemplates() {
         ClassPathScanningCandidateComponentProvider scanner =
                 new ClassPathScanningCandidateComponentProvider(false);
 
         scanner.addIncludeFilter(new AnnotationTypeFilter(JasperModularReport.class));
         scanner.addIncludeFilter(new AnnotationTypeFilter(JasperSubreport.class));
 
-        List<String> paths = new ArrayList<>();
+        Map<String, ReportTemplate> templates = new LinkedHashMap<>();
 
-        for (BeanDefinition bd: scanner.findCandidateComponents(properties.getBasePackage())) {
+        for (BeanDefinition beanDefinition: scanner.findCandidateComponents(properties.getBasePackage())) {
             try {
-                Class<?> clazz = Class.forName(bd.getBeanClassName());
+                Class<?> clazz = Class.forName(beanDefinition.getBeanClassName());
+                String templatePath = JasperModularCompiler.templatePathOf(clazz);
 
-                JasperModularReport root = clazz.getAnnotation(JasperModularReport.class);
-                if (root != null && !root.templatePath().isEmpty()) {
-                    paths.add(root.templatePath());
-                }
-
-                JasperSubreport sub = clazz.getAnnotation(JasperSubreport.class);
-                if (sub != null && !sub.templatePath().isEmpty()) {
-                    paths.add(sub.templatePath());
+                if (!templatePath.isEmpty()) {
+                    templates.putIfAbsent(templatePath, new ReportTemplate(clazz, templatePath));
                 }
             } catch (ClassNotFoundException e) {
-                log.error("Cannot load class: {}", bd.getBeanClassName());
+                log.error("Cannot load class: {}", beanDefinition.getBeanClassName());
             }
         }
-        return paths;
+        return List.copyOf(templates.values());
     }
 
     /**
-     * Compiles the JRXML template at the given classpath path and stores it in the cache;
+     * Compiles the JRXML template and stores it in the cache;
      * logs and rethrows on failure (fail-fast).
      */
-    private void compileAndCache(String path) {
+    private void compileAndCache(ReportTemplate template) {
         long start = System.nanoTime();
         try {
-            JasperModularCompiler.CACHE.computeIfAbsent(path, p -> {
-                try (InputStream stream = getClass().getResourceAsStream(p)) {
-                    if (stream == null) {
-                        throw new JasperModularException("JRXML not found: " + p);
-                    }
-                    return JasperCompileManager.compileReport(stream);
-                } catch (JRException | IOException e) {
-                    throw new JasperModularException("Failed to compile: " + p, e);
-                }
-            });
+            JasperModularCompiler.compileReport(template.type(), template.path());
             long ms = Math.round((System.nanoTime() - start) / 1_000_000.0);
-            log.info("  ✓ {} - {} ms", path, ms);
+            log.info("  ✓ {} - {} ms", template.path(), ms);
         } catch (JasperModularException e) {
-            log.error("  ✗ {} - FAILED: {}", path, e.getMessage());
+            log.error("  ✗ {} - FAILED: {}", template.path(), e.getMessage());
             throw e;
         }
     }
+
 }

@@ -1,35 +1,51 @@
 package com.chaykin.jasper.core.contract;
 
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.BaseTypedSubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ChildReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.CollectionReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.CompanyReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.CurrencyModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.FieldNameReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.FinancialModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.IgnoredFieldReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ItemsModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.LineItem;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedItemsModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedListReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedOtherModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MixedReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.MultiSubreportReport;
-import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NoPrefixReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullSubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.NullableReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.OtherModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.PojoListReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.PojoSubreportReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RecordItem;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RecordListReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RichListReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.RichModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ScalarReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SelfNodeModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SpecialItemsModule;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.StaticFieldReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SubreportReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.SummaryModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleListReport;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleModule;
 import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.ToggleReport;
+import com.chaykin.jasper.core.contract.JasperModularDataFillerFixture.WildcardListReport;
 import com.chaykin.jasper.core.exception.JasperModularException;
+import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
 import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
+import net.sf.jasperreports.engine.design.JRDesignField;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -69,6 +85,21 @@ class JasperModularDataFillerTest {
             // then
             assertThat(params).containsKey("present")
                               .doesNotContainKey("absent");
+        }
+
+        @Test
+        @DisplayName("static fields are placed into the map unless annotated with @JasperIgnore")
+        void staticField_isAddedToMapUnlessIgnored() {
+            // given
+            var report = new StaticFieldReport();
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            assertThat(params).containsEntry("STATIC_CONSTANT", "shared")
+                              .containsKey("instanceField")
+                              .doesNotContainKey("IGNORED_CONSTANT");
         }
     }
 
@@ -136,6 +167,18 @@ class JasperModularDataFillerTest {
             assertThat(params).doesNotContainKey("items");
         }
 
+        @Test
+        @DisplayName("List of records throws - bean data sources cannot read record accessors")
+        void listOfRecords_throwsException() {
+            // given
+            var report = new RecordListReport(List.of(new RecordItem("x")));
+
+            // when / then
+            assertThatThrownBy(report::fillMapParameters)
+                    .isInstanceOf(JasperModularException.class)
+                    .hasMessageContaining("Records are not supported as collection elements");
+        }
+
     }
 
     @Nested
@@ -143,8 +186,8 @@ class JasperModularDataFillerTest {
     class SubreportFields {
 
         @Test
-        @DisplayName("subreport field produces <prefix>Report and <prefix>MapParameter using annotation prefix")
-        void subreportField_producesTwoEntriesWithAnnotationPrefix() {
+        @DisplayName("subreport field produces <field>Report and <field>MapParameter")
+        void subreportField_producesTwoEntriesNamedAfterTheField() {
             // given
             var report = new SubreportReport(new ItemsModule("Section A"));
 
@@ -153,23 +196,74 @@ class JasperModularDataFillerTest {
 
             // then
             assertThat(params)
-                    .containsKey("ItemsReport")
-                    .containsKey("ItemsMapParameter");
+                    .containsKey("itemsModuleReport")
+                    .containsKey("itemsModuleMapParameter");
         }
 
         @Test
-        @DisplayName("subreport field uses simple class name as prefix when prefix attribute is not set")
-        void subreportField_usesClassNameAsPrefixWhenNotSet() {
+        @DisplayName("subclass instance of an annotated module is classified by the declared field type")
+        void subclassInstance_usesDeclaredTypeWiring() {
             // given
-            var report = new NoPrefixReport(new OtherModule("note"));
+            var report = new SubreportReport(new SpecialItemsModule("A"));
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            assertThat(params).containsKey("itemsModuleReport")
+                              .containsKey("itemsModuleMapParameter")
+                              .doesNotContainKey("section");
+        }
+
+        @Test
+        @DisplayName("field declared with an unannotated module type throws")
+        void unannotatedDeclaredModuleType_throwsException() {
+            // given
+            var report = new BaseTypedSubreportReport(new ItemsModule("A"));
+
+            // when / then
+            assertThatThrownBy(report::fillMapParameters)
+                    .isInstanceOf(JasperModularException.class)
+                    .hasMessageContaining("@JasperSubreport-annotated type");
+        }
+
+        @Test
+        @DisplayName("annotated class that does not extend SubreportModule throws a clear error")
+        void annotatedPojo_throwsException() {
+            // given
+            var report = new PojoSubreportReport();
+
+            // when / then
+            assertThatThrownBy(report::fillMapParameters)
+                    .isInstanceOf(JasperModularException.class)
+                    .hasMessageContaining("PojoModule must extend SubreportModule");
+        }
+
+        @Test
+        @DisplayName("list of annotated classes that do not extend SubreportModule throws a clear error")
+        void annotatedPojoList_throwsException() {
+            // given
+            var report = new PojoListReport();
+
+            // when / then
+            assertThatThrownBy(report::fillMapParameters)
+                    .isInstanceOf(JasperModularException.class)
+                    .hasMessageContaining("PojoModule must extend SubreportModule");
+        }
+
+        @Test
+        @DisplayName("parameter name comes from the field, not from the module type")
+        void subreportField_isNamedAfterFieldNotType() {
+            // given
+            var report = new FieldNameReport(new OtherModule("note"));
 
             // when
             Map<String, Object> params = report.fillMapParameters();
 
             // then
             assertThat(params)
-                    .containsKey("OtherModuleReport")
-                    .containsKey("OtherModuleMapParameter");
+                    .containsKey("appendixReport")
+                    .containsKey("appendixMapParameter");
         }
 
         @Test
@@ -186,10 +280,10 @@ class JasperModularDataFillerTest {
 
             // then
             assertThat(params)
-                    .containsKey("ItemsReport")
-                    .containsKey("ItemsMapParameter")
-                    .containsKey("OtherModuleReport")
-                    .containsKey("OtherModuleMapParameter");
+                    .containsKey("itemsModuleReport")
+                    .containsKey("itemsModuleMapParameter")
+                    .containsKey("otherModuleReport")
+                    .containsKey("otherModuleMapParameter");
         }
     }
 
@@ -231,8 +325,8 @@ class JasperModularDataFillerTest {
             assertThat(params).containsEntry("title", "Invoice");
             assertThat(params.get("items")).isInstanceOf(JRBeanCollectionDataSource.class);
             assertThat(params)
-                    .containsKey("ItemsReport")
-                    .containsKey("ItemsMapParameter");
+                    .containsKey("itemsModuleReport")
+                    .containsKey("itemsModuleMapParameter");
         }
     }
 
@@ -247,8 +341,8 @@ class JasperModularDataFillerTest {
 
         // then
         assertThat(params)
-                .doesNotContainKey("ItemsReport")
-                .doesNotContainKey("ItemsMapParameter");
+                .doesNotContainKey("itemsModuleReport")
+                .doesNotContainKey("itemsModuleMapParameter");
     }
 
     @Nested
@@ -270,10 +364,10 @@ class JasperModularDataFillerTest {
 
             // then
             assertThat(params)
-                    .containsKey("FinancialReport")
-                    .containsKey("FinancialMapParameter")
-                    .containsKey("SummaryReport")
-                    .containsKey("SummaryMapParameter");
+                    .containsKey("financialModuleReport")
+                    .containsKey("financialModuleMapParameter")
+                    .containsKey("summaryModuleReport")
+                    .containsKey("summaryModuleMapParameter");
         }
 
         @Test
@@ -292,13 +386,13 @@ class JasperModularDataFillerTest {
             // then
             @SuppressWarnings("unchecked")
             Map<String, Object> financialParams =
-                    (Map<String, Object>) params.get("FinancialMapParameter");
-            assertThat(financialParams).containsKey("CurrencyReport");
+                    (Map<String, Object>) params.get("financialModuleMapParameter");
+            assertThat(financialParams).containsKey("currencyModuleReport");
 
             @SuppressWarnings("unchecked")
             Map<String, Object> summaryParams =
-                    (Map<String, Object>) params.get("SummaryMapParameter");
-            assertThat(summaryParams).containsKey("CurrencyReport");
+                    (Map<String, Object>) params.get("summaryModuleMapParameter");
+            assertThat(summaryParams).containsKey("currencyModuleReport");
         }
 
     }
@@ -308,7 +402,7 @@ class JasperModularDataFillerTest {
     class SubreportLists {
 
         @Test
-        @DisplayName("List of subreport modules produces a single <prefix>DataSource of element maps")
+        @DisplayName("List of subreport modules produces a single <field>DataSource of element maps")
         void listOfSubreportModules_producesRepeatingSubreport() {
             // given
             var report = new SubreportListReport(List.of(new ItemsModule("a"), new ItemsModule("b")));
@@ -317,21 +411,21 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then - the compiled report rides in the data source rows, not as a separate param
-            assertThat(params).containsKey("ItemsDataSource")
-                              .doesNotContainKey("ItemsReport");
-            assertThat(params.get("ItemsDataSource")).isInstanceOf(JRMapCollectionDataSource.class);
+            assertThat(params).containsKey("modulesDataSource")
+                              .doesNotContainKey("itemsModuleReport");
+            assertThat(params.get("modulesDataSource")).isInstanceOf(JRMapCollectionDataSource.class);
         }
 
         @Test
         @DisplayName("data source carries one row per element")
-        void dataSource_hasOneRowPerElement() throws Exception {
+        void dataSource_hasOneRowPerElement() {
             // given
             var report = new SubreportListReport(
                     List.of(new ItemsModule("a"), new ItemsModule("b"), new ItemsModule("c")));
 
             // when
             var dataSource =
-                    (JRMapCollectionDataSource) report.fillMapParameters().get("ItemsDataSource");
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("modulesDataSource");
 
             // then
             int rows = 0;
@@ -351,8 +445,33 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then
-            assertThat(params).doesNotContainKey("ItemsReport")
-                              .doesNotContainKey("ItemsDataSource");
+            assertThat(params).doesNotContainKey("itemsModuleReport")
+                              .doesNotContainKey("modulesDataSource");
+        }
+
+        @Test
+        @DisplayName("mixed module subclasses each render with their own compiled template")
+        void mixedSubclasses_eachRowCarriesOwnTemplate() {
+            // given
+            var report = new MixedListReport(
+                    List.of(new MixedItemsModule("a"), new MixedOtherModule("b")));
+
+            // when
+            var dataSource =
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("modulesDataSource");
+
+            // then - each row carries its element's template, not the first element's
+            JRDesignField reportField = new JRDesignField();
+            reportField.setName("report");
+
+            assertThat(dataSource.next()).isTrue();
+            Object firstRowReport = dataSource.getFieldValue(reportField);
+            assertThat(dataSource.next()).isTrue();
+            Object secondRowReport = dataSource.getFieldValue(reportField);
+
+            assertThat(firstRowReport).isSameAs(new MixedItemsModule("x").compileReport());
+            assertThat(secondRowReport).isSameAs(new MixedOtherModule("y").compileReport());
+            assertThat(firstRowReport).isNotSameAs(secondRowReport);
         }
 
         @Test
@@ -382,8 +501,8 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then
-            assertThat(params).doesNotContainKey("ToggleReport")
-                              .doesNotContainKey("ToggleMapParameter");
+            assertThat(params).doesNotContainKey("toggleModuleReport")
+                              .doesNotContainKey("toggleModuleMapParameter");
         }
 
         @Test
@@ -396,20 +515,20 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then
-            assertThat(params).containsKey("ToggleReport")
-                              .containsKey("ToggleMapParameter");
+            assertThat(params).containsKey("toggleModuleReport")
+                              .containsKey("toggleModuleMapParameter");
         }
 
         @Test
         @DisplayName("empty elements are dropped from a subreport list")
-        void emptyElements_areDroppedFromList() throws Exception {
+        void emptyElements_areDroppedFromList() {
             // given
             var report = new ToggleListReport(List.of(
                     new ToggleModule(false), new ToggleModule(true), new ToggleModule(false)));
 
             // when
             var dataSource =
-                    (JRMapCollectionDataSource) report.fillMapParameters().get("ToggleDataSource");
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("modulesDataSource");
 
             // then
             int rows = 0;
@@ -430,7 +549,67 @@ class JasperModularDataFillerTest {
             Map<String, Object> params = report.fillMapParameters();
 
             // then
-            assertThat(params).doesNotContainKey("ToggleDataSource");
+            assertThat(params).doesNotContainKey("modulesDataSource");
+        }
+
+        @Test
+        @DisplayName("null elements are skipped without producing a row")
+        void nullElements_areSkipped() throws Exception {
+            // given
+            var report = new SubreportListReport(
+                    Arrays.asList(new ItemsModule("A"), null, new ItemsModule("B")));
+
+            // when
+            var dataSource =
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("modulesDataSource");
+
+            // then
+            int rows = 0;
+            while (dataSource.next()) {
+                rows++;
+            }
+            assertThat(rows).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("wildcard element type is resolved to its bound")
+        void wildcardElementType_producesRepeatingSubreport() {
+            // given
+            var report = new WildcardListReport(List.of(new ItemsModule("A")));
+
+            // when
+            Map<String, Object> params = report.fillMapParameters();
+
+            // then
+            assertThat(params).containsKey("modulesDataSource")
+                              .doesNotContainKey("modules");
+        }
+
+        @Test
+        @DisplayName("row map of a list element carries its own collection as a data source")
+        void elementWithCollection_rowMapCarriesDataSource() {
+            // given
+            var report = new RichListReport(List.of(
+                    new RichModule("Section A", List.of(new LineItem("Widget", BigDecimal.TEN)))));
+
+            // when
+            var dataSource =
+                    (JRMapCollectionDataSource) report.fillMapParameters().get("modulesDataSource");
+
+            // then
+            assertThat(dataSource.next()).isTrue();
+
+            JRDesignField paramsField = new JRDesignField();
+            paramsField.setName("params");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> rowParams =
+                    (Map<String, Object>) dataSource.getFieldValue(paramsField);
+            assertThat(rowParams).containsEntry("title", "Section A");
+            assertThat(rowParams.get("items")).isInstanceOf(JRBeanCollectionDataSource.class);
+
+            JRDesignField reportField = new JRDesignField();
+            reportField.setName("report");
+            assertThat(dataSource.getFieldValue(reportField)).isInstanceOf(JasperReport.class);
         }
     }
 

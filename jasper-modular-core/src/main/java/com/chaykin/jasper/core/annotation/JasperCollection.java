@@ -8,6 +8,7 @@ import java.lang.annotation.Target;
 /**
  * Configures JRXML component generation for a {@link java.util.Collection}-typed field
  * in a {@link JasperModularReport} or {@link JasperSubreport} annotated class.
+ * Ignored for collections of {@link JasperSubreport} modules.
  */
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.FIELD)

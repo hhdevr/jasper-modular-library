@@ -21,25 +21,4 @@ public abstract class SubreportModule
      */
     public abstract boolean isEmpty();
 
-    /**
-     * Returns the rendering order relative to sibling subreports; lower values render first.
-     *
-     * @deprecated Not yet consulted by the renderer; control ordering via field declaration
-     * order and the JRXML layout instead.
-     */
-    @Deprecated(forRemoval = true)
-    public int getOrder() {
-        return 0;
-    }
-
-    /**
-     * Returns whether this subreport should force a page break before rendering.
-     *
-     * @deprecated Not yet consulted by the renderer; add a page break in the JRXML template
-     * instead.
-     */
-    @Deprecated(forRemoval = true)
-    public boolean isStartNewPage() {
-        return false;
-    }
 }

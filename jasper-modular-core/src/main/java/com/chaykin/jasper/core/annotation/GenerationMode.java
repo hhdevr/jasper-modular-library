@@ -5,12 +5,18 @@ package com.chaykin.jasper.core.annotation;
  */
 public enum GenerationMode {
 
-    /** No JRXML generation; the file is managed entirely by hand. */
+    /**
+     * No JRXML generation; the file is managed entirely by hand.
+     */
     NONE,
 
-    /** Creates a new JRXML from a blank template, overwriting any existing file. */
+    /**
+     * Creates a new JRXML from a blank template, overwriting any existing file.
+     */
     CREATE,
 
-    /** Injects missing elements into an existing JRXML, preserving user layout (default). */
+    /**
+     * Injects missing elements into an existing JRXML, preserving user layout (default).
+     */
     INJECT
 }

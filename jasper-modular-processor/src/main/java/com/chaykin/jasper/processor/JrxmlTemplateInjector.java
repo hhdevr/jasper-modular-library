@@ -9,7 +9,10 @@ import net.sf.jasperreports.components.list.StandardListComponent;
 import net.sf.jasperreports.components.table.DesignCell;
 import net.sf.jasperreports.components.table.StandardColumn;
 import net.sf.jasperreports.components.table.StandardTable;
+import net.sf.jasperreports.engine.JRDatasetRun;
 import net.sf.jasperreports.engine.JRException;
+import net.sf.jasperreports.engine.component.Component;
+import net.sf.jasperreports.engine.data.JRAbstractBeanDataSource;
 import net.sf.jasperreports.engine.design.JRDesignBand;
 import net.sf.jasperreports.engine.design.JRDesignComponentElement;
 import net.sf.jasperreports.engine.design.JRDesignDataset;
@@ -34,6 +37,9 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 
+import static com.chaykin.jasper.core.contract.JasperModularDataFiller.MAP_PARAMETER_SUFFIX;
+import static com.chaykin.jasper.core.contract.JasperModularDataFiller.REPORT_SUFFIX;
+
 /**
  * Idempotently injects missing elements derived from annotated class fields into a
  * {@link JasperDesign} and writes the result to an output stream.
@@ -57,11 +63,11 @@ public class JrxmlTemplateInjector {
     /**
      * Injects all missing elements into the design and writes the result.
      *
-     * @throws Exception if injection or serialization fails
+     * @throws JRException if injection or serialization fails
      */
     public void inject(JasperDesign design,
                        List<JrxmlParameter> fields,
-                       OutputStream output) throws Exception {
+                       OutputStream output) throws JRException {
         injectDatasets(design, fields);
         injectParameters(design, fields);
         injectCollectionComponents(design, fields);
@@ -75,8 +81,7 @@ public class JrxmlTemplateInjector {
             throws JRException {
         for (JrxmlParameter field: fields) {
             if (design.getParametersMap().containsKey(field.name())) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Parameter already exists - skipping: " + field.name());
+                note("Parameter already exists - skipping: " + field.name());
                 continue;
             }
             JRDesignParameter param = new JRDesignParameter();
@@ -94,9 +99,7 @@ public class JrxmlTemplateInjector {
             }
 
             if (design.getDatasetMap().containsKey(field.dataset().name())) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Dataset already exists - skipping: "
-                                      + field.dataset().name());
+                note("Dataset already exists - skipping: " + field.dataset().name());
                 continue;
             }
 
@@ -126,24 +129,18 @@ public class JrxmlTemplateInjector {
 
         for (JrxmlParameter field: collectionFields) {
             if (collectionComponentExists(detailSection, field.dataset().name())) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "List component already exists - skipping: "
-                                      + field.name());
+                note("Collection component already exists - skipping: " + field.name());
                 continue;
             }
 
-            JRDesignBand band = new JRDesignBand();
-            band.setHeight(LIST_HEIGHT);
-            band.setSplitType(SplitTypeEnum.STRETCH);
+            JRDesignBand band = emptyBand(LIST_HEIGHT);
 
             if (field.dataset().componentType() == CollectionComponentType.TABLE) {
                 band.addElement(createTableComponent(field));
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Injected table component: " + field.name());
+                note("Injected table component: " + field.name());
             } else {
                 band.addElement(createListComponent(field));
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Injected list component: " + field.name());
+                note("Injected list component: " + field.name());
             }
 
             detailSection.addBand(band);
@@ -155,25 +152,24 @@ public class JrxmlTemplateInjector {
                      .flatMap(b -> Arrays.stream(b.getElements()))
                      .filter(e -> e instanceof JRDesignComponentElement)
                      .map(e -> (JRDesignComponentElement) e)
-                     .anyMatch(e -> {
-                         if (e.getComponent() instanceof StandardListComponent lc) {
-                             JRDesignDatasetRun run = (JRDesignDatasetRun) lc.getDatasetRun();
-                             return run != null && datasetName.equals(run.getDatasetName());
-                         }
-                         if (e.getComponent() instanceof StandardTable tbl) {
-                             JRDesignDatasetRun run = (JRDesignDatasetRun) tbl.getDatasetRun();
-                             return run != null && datasetName.equals(run.getDatasetName());
-                         }
-                         return false;
-                     });
+                     .map(e -> datasetRunOf(e.getComponent()))
+                     .anyMatch(run -> run != null && datasetName.equals(run.getDatasetName()));
+    }
+
+    private static JRDatasetRun datasetRunOf(Component component) {
+        if (component instanceof StandardListComponent list) {
+            return list.getDatasetRun();
+        }
+        if (component instanceof StandardTable table) {
+            return table.getDatasetRun();
+        }
+        return null;
     }
 
     private JRDesignComponentElement createListComponent(JrxmlParameter field) {
         List<JrxmlDatasetField> datasetFields = field.dataset().fields();
         int columnWidth = field.dataset().columnWidth();
         int totalWidth = datasetFields.size() * columnWidth;
-
-        JRDesignDatasetRun datasetRun = buildDatasetRun(field);
 
         DesignListContents contents = new DesignListContents();
         contents.setHeight(CELL_HEIGHT);
@@ -186,25 +182,16 @@ public class JrxmlTemplateInjector {
             textField.setY(0);
             textField.setWidth(columnWidth);
             textField.setHeight(CELL_HEIGHT);
-            JRDesignExpression expr = new JRDesignExpression();
-            expr.setText("$F{" + datasetField.name() + "}");
-            textField.setExpression(expr);
+            textField.setExpression(expression("$F{" + datasetField.name() + "}"));
             contents.addElement(textField);
             x += columnWidth;
         }
 
         StandardListComponent listComponent = new StandardListComponent();
-        listComponent.setDatasetRun(datasetRun);
+        listComponent.setDatasetRun(buildDatasetRun(field));
         listComponent.setContents(contents);
 
-        JRDesignComponentElement element = new JRDesignComponentElement();
-        element.setX(0);
-        element.setY(0);
-        element.setWidth(totalWidth);
-        element.setHeight(LIST_HEIGHT);
-        element.setComponent(listComponent);
-        applyComponentKeyIfNeeded(element, "list");
-        return element;
+        return componentElement(listComponent, totalWidth, LIST_HEIGHT, "list");
     }
 
     private JRDesignComponentElement createTableComponent(JrxmlParameter field) {
@@ -212,10 +199,8 @@ public class JrxmlTemplateInjector {
         int columnWidth = field.dataset().columnWidth();
         int totalWidth = datasetFields.size() * columnWidth;
 
-        JRDesignDatasetRun datasetRun = buildDatasetRun(field);
-
         StandardTable table = new StandardTable();
-        table.setDatasetRun(datasetRun);
+        table.setDatasetRun(buildDatasetRun(field));
 
         for (JrxmlDatasetField datasetField: datasetFields) {
             StandardColumn column = new StandardColumn();
@@ -228,7 +213,10 @@ public class JrxmlTemplateInjector {
             headerText.setY(0);
             headerText.setWidth(columnWidth);
             headerText.setHeight(HEADER_HEIGHT);
-            headerText.setText(datasetField.name());
+            headerText.setText(
+                    JRAbstractBeanDataSource.CURRENT_BEAN_MAPPING.equals(datasetField.name())
+                    ? field.name()
+                    : datasetField.name());
             headerCell.addElement(headerText);
             column.setColumnHeader(headerCell);
 
@@ -239,32 +227,67 @@ public class JrxmlTemplateInjector {
             detailTextField.setY(0);
             detailTextField.setWidth(columnWidth);
             detailTextField.setHeight(CELL_HEIGHT);
-            JRDesignExpression expr = new JRDesignExpression();
-            expr.setText("$F{" + datasetField.name() + "}");
-            detailTextField.setExpression(expr);
+            detailTextField.setExpression(expression("$F{" + datasetField.name() + "}"));
             detailCell.addElement(detailTextField);
             column.setDetailCell(detailCell);
 
             table.addColumn(column);
         }
 
-        JRDesignComponentElement element = new JRDesignComponentElement();
-        element.setX(0);
-        element.setY(0);
-        element.setWidth(totalWidth);
-        element.setHeight(HEADER_HEIGHT + CELL_HEIGHT);
-        element.setComponent(table);
-        applyComponentKeyIfNeeded(element, "table");
-        return element;
+        return componentElement(table, totalWidth, HEADER_HEIGHT + CELL_HEIGHT, "table");
     }
 
     private JRDesignDatasetRun buildDatasetRun(JrxmlParameter field) {
         JRDesignDatasetRun datasetRun = new JRDesignDatasetRun();
         datasetRun.setDatasetName(field.dataset().name());
-        JRDesignExpression dsExpr = new JRDesignExpression();
-        dsExpr.setText("$P{" + field.name() + "}");
-        datasetRun.setDataSourceExpression(dsExpr);
+        datasetRun.setDataSourceExpression(expression("$P{" + field.name() + "}"));
         return datasetRun;
+    }
+
+    private JRDesignComponentElement componentElement(Component component,
+                                                      int width,
+                                                      int height,
+                                                      String componentName) {
+        JRDesignComponentElement element = new JRDesignComponentElement();
+        element.setX(0);
+        element.setY(0);
+        element.setWidth(width);
+        element.setHeight(height);
+        element.setComponent(component);
+        element.setPositionType(PositionTypeEnum.FLOAT);
+        element.setRemoveLineWhenBlank(true);
+        applyComponentKeyIfNeeded(element, componentName);
+        return element;
+    }
+
+    private JRDesignSubreport createSubreport(int width,
+                                              String parametersMapExpression,
+                                              String reportExpression) {
+        JRDesignSubreport subreport = new JRDesignSubreport(null);
+        subreport.setX(0);
+        subreport.setY(0);
+        subreport.setWidth(width);
+        subreport.setHeight(SUBREPORT_HEIGHT);
+        subreport.setPositionType(PositionTypeEnum.FLOAT);
+        subreport.setRemoveLineWhenBlank(true);
+        subreport.setParametersMapExpression(expression(parametersMapExpression));
+        subreport.setDataSourceExpression(
+                expression("new net.sf.jasperreports.engine.JREmptyDataSource()"));
+        subreport.setExpression(expression(reportExpression));
+        return subreport;
+    }
+
+    static JRDesignBand emptyBand(int height) {
+        JRDesignBand band = new JRDesignBand();
+        band.setHeight(height);
+        band.setSplitType(SplitTypeEnum.STRETCH);
+        return band;
+    }
+
+    private static JRDesignExpression expression(String text) {
+        JRDesignExpression expression = new JRDesignExpression();
+        expression.setText(text);
+        return expression;
     }
 
     private void injectSubreportBands(JasperDesign design, List<JrxmlParameter> fields) {
@@ -284,52 +307,30 @@ public class JrxmlTemplateInjector {
 
         for (String prefix: subreportPrefixes) {
             if (subreportBandExists(detailSection, prefix)) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Subreport band already exists - skipping: " + prefix);
+                note("Subreport band already exists - skipping: " + prefix);
                 continue;
             }
             detailSection.addBand(createSubreportBand(prefix, columnWidth));
-            messager.printMessage(Diagnostic.Kind.NOTE,
-                                  "Injected subreport band: " + prefix);
+            note("Injected subreport band: " + prefix);
         }
     }
 
     private boolean subreportBandExists(JRDesignSection section, String prefix) {
-        String expectedExpr = "$P{" + prefix + "Report}";
+        String expectedExpression = "$P{" + prefix + REPORT_SUFFIX + "}";
         return Arrays.stream(section.getBands())
                      .flatMap(b -> Arrays.stream(b.getElements()))
                      .filter(e -> e instanceof JRDesignSubreport)
                      .map(e -> (JRDesignSubreport) e)
                      .anyMatch(sr -> sr.getExpression() != null
-                                     && expectedExpr.equals(sr.getExpression().getText()));
+                                     && expectedExpression.equals(sr.getExpression().getText()));
     }
 
     private JRDesignBand createSubreportBand(String prefix, int columnWidth) {
-        JRDesignBand band = new JRDesignBand();
-        band.setHeight(SUBREPORT_HEIGHT);
-        band.setSplitType(SplitTypeEnum.STRETCH);
+        JRDesignBand band = emptyBand(SUBREPORT_HEIGHT);
 
-        JRDesignSubreport subreport = new JRDesignSubreport(null);
-        subreport.setX(0);
-        subreport.setY(0);
-        subreport.setWidth(columnWidth);
-        subreport.setHeight(SUBREPORT_HEIGHT);
-        subreport.setPositionType(PositionTypeEnum.FLOAT);
-        subreport.setRemoveLineWhenBlank(true);
-
-        JRDesignExpression paramsExpr = new JRDesignExpression();
-        paramsExpr.setText("$P{" + prefix + "MapParameter}");
-        subreport.setParametersMapExpression(paramsExpr);
-
-        JRDesignExpression dsExpr = new JRDesignExpression();
-        dsExpr.setText("new net.sf.jasperreports.engine.JREmptyDataSource()");
-        subreport.setDataSourceExpression(dsExpr);
-
-        JRDesignExpression expr = new JRDesignExpression();
-        expr.setText("$P{" + prefix + "Report}");
-        subreport.setExpression(expr);
-
-        band.addElement(subreport);
+        band.addElement(createSubreport(columnWidth,
+                                        "$P{" + prefix + MAP_PARAMETER_SUFFIX + "}",
+                                        "$P{" + prefix + REPORT_SUFFIX + "}"));
         return band;
     }
 
@@ -347,87 +348,59 @@ public class JrxmlTemplateInjector {
 
         for (JrxmlParameter field: listFields) {
             if (collectionComponentExists(detailSection, field.dataset().name())) {
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                                      "Subreport list already exists - skipping: " + field.name());
+                note("Subreport list already exists - skipping: " + field.name());
                 continue;
             }
 
-            JRDesignBand band = new JRDesignBand();
-            band.setHeight(SUBREPORT_HEIGHT);
-            band.setSplitType(SplitTypeEnum.STRETCH);
+            JRDesignBand band = emptyBand(SUBREPORT_HEIGHT);
             band.addElement(createSubreportListComponent(field, columnWidth));
             detailSection.addBand(band);
 
-            messager.printMessage(Diagnostic.Kind.NOTE,
-                                  "Injected subreport list: " + field.subreportPrefix());
+            note("Injected subreport list: " + field.subreportPrefix());
         }
     }
 
     private JRDesignComponentElement createSubreportListComponent(JrxmlParameter field, int width) {
-        JRDesignDatasetRun datasetRun = new JRDesignDatasetRun();
-        datasetRun.setDatasetName(field.dataset().name());
-        JRDesignExpression dsExpr = new JRDesignExpression();
-        dsExpr.setText("$P{" + field.name() + "}");
-        datasetRun.setDataSourceExpression(dsExpr);
-
-        JRDesignSubreport subreport = new JRDesignSubreport(null);
-        subreport.setX(0);
-        subreport.setY(0);
-        subreport.setWidth(width);
-        subreport.setHeight(SUBREPORT_HEIGHT);
-        subreport.setPositionType(PositionTypeEnum.FLOAT);
-        subreport.setRemoveLineWhenBlank(true);
-
-        JRDesignExpression paramsExpr = new JRDesignExpression();
-        paramsExpr.setText("$F{" + JasperModularDataFiller.SUBREPORT_PARAMS_FIELD + "}");
-        subreport.setParametersMapExpression(paramsExpr);
-
-        JRDesignExpression emptyDs = new JRDesignExpression();
-        emptyDs.setText("new net.sf.jasperreports.engine.JREmptyDataSource()");
-        subreport.setDataSourceExpression(emptyDs);
-
-        JRDesignExpression reportExpr = new JRDesignExpression();
-        reportExpr.setText("$F{" + JasperModularDataFiller.SUBREPORT_REPORT_FIELD + "}");
-        subreport.setExpression(reportExpr);
-
         DesignListContents contents = new DesignListContents();
         contents.setHeight(SUBREPORT_HEIGHT);
         contents.setWidth(width);
-        contents.addElement(subreport);
+        contents.addElement(createSubreport(
+                width,
+                "$F{" + JasperModularDataFiller.SUBREPORT_PARAMS_FIELD + "}",
+                "$F{" + JasperModularDataFiller.SUBREPORT_REPORT_FIELD + "}"));
 
         StandardListComponent listComponent = new StandardListComponent();
-        listComponent.setDatasetRun(datasetRun);
+        listComponent.setDatasetRun(buildDatasetRun(field));
         listComponent.setContents(contents);
 
-        JRDesignComponentElement element = new JRDesignComponentElement();
-        element.setX(0);
-        element.setY(0);
-        element.setWidth(width);
-        element.setHeight(SUBREPORT_HEIGHT);
-        element.setComponent(listComponent);
-        applyComponentKeyIfNeeded(element, "list");
-        return element;
+        return componentElement(listComponent, width, SUBREPORT_HEIGHT, "list");
     }
 
     private void applyComponentKeyIfNeeded(JRDesignComponentElement element,
                                            String componentName) {
         try {
-            Class<?> keyClass = Class.forName(
-                    "net.sf.jasperreports.engine.component.ComponentKey");
-            Constructor<?> ctor = keyClass.getConstructor(
-                    String.class, String.class, String.class);
-            Object key = ctor.newInstance(
-                    "http://jasperreports.sourceforge.net/jasperreports/components",
-                    "jr",
-                    componentName);
+            Class<?> keyClass = Class.forName("net.sf.jasperreports.engine.component.ComponentKey");
+            Constructor<?> constructor = keyClass.getConstructor(String.class,
+                                                                 String.class,
+                                                                 String.class);
+            Object key = constructor.newInstance("http://jasperreports.sourceforge.net/jasperreports/components",
+                                                 "jr",
+                                                 componentName);
             Method setter = element.getClass().getMethod("setComponentKey", keyClass);
             setter.invoke(element, key);
         } catch (ClassNotFoundException ignored) {
             // JR7: ComponentKey removed, namespace inferred automatically - expected path.
         } catch (ReflectiveOperationException e) {
-            messager.printMessage(Diagnostic.Kind.WARNING,
-                                  "Could not set ComponentKey for " + componentName
-                                  + ": " + e.getMessage());
+            warn("Could not set ComponentKey for " + componentName
+                 + ": " + e.getMessage());
         }
+    }
+
+    private void note(String message) {
+        messager.printMessage(Diagnostic.Kind.NOTE, message);
+    }
+
+    private void warn(String message) {
+        messager.printMessage(Diagnostic.Kind.WARNING, message);
     }
 }

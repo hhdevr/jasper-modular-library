@@ -13,6 +13,7 @@ import java.util.List;
  * Test fixtures for {@link JasperModularDataFillerTest}.
  * Contains minimal report and subreport classes that simulate real-world usage.
  */
+@SuppressWarnings("unused") // fixture fields are read reflectively by JasperModularDataFiller
 final class JasperModularDataFillerFixture {
 
     private JasperModularDataFillerFixture() {}
@@ -29,7 +30,7 @@ final class JasperModularDataFillerFixture {
 
     }
 
-    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Items")
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
     static class ItemsModule extends SubreportModule {
 
         String title;
@@ -39,6 +40,37 @@ final class JasperModularDataFillerFixture {
         @Override
         public boolean isEmpty() {return false;}
 
+    }
+
+    static class SpecialItemsModule extends ItemsModule {
+
+        SpecialItemsModule(String title) {super(title);}
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreport.jrxml")
+    static class BaseTypedSubreportReport extends ModularReport {
+
+        SubreportModule section;
+
+        BaseTypedSubreportReport(SubreportModule section) {this.section = section;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
+    static class PojoModule {
+
+        String title = "not a module";
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreport.jrxml")
+    static class PojoSubreportReport extends ModularReport {
+
+        PojoModule pojoModule = new PojoModule();
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
+    static class PojoListReport extends ModularReport {
+
+        List<PojoModule> modules = List.of(new PojoModule());
     }
 
     @JasperSubreport(templatePath = "/reports/other.jrxml")
@@ -62,6 +94,17 @@ final class JasperModularDataFillerFixture {
             this.customerName = customerName;
             this.total = total;
         }
+    }
+
+    @JasperModularReport(templatePath = "/reports/static_fields.jrxml")
+    static class StaticFieldReport extends ModularReport {
+
+        static final String STATIC_CONSTANT = "shared";
+
+        @JasperIgnore
+        static final String IGNORED_CONSTANT = "hidden";
+
+        String instanceField = "kept";
     }
 
     @JasperModularReport(templatePath = "/reports/nullable.jrxml")
@@ -100,12 +143,12 @@ final class JasperModularDataFillerFixture {
 
     }
 
-    @JasperModularReport(templatePath = "/reports/prefix.jrxml")
-    static class NoPrefixReport extends ModularReport {
+    @JasperModularReport(templatePath = "/reports/field_name.jrxml")
+    static class FieldNameReport extends ModularReport {
 
-        OtherModule otherModule;
+        OtherModule appendix;
 
-        NoPrefixReport(OtherModule module) {this.otherModule = module;}
+        FieldNameReport(OtherModule module) {this.appendix = module;}
     }
 
     @JasperModularReport(templatePath = "/reports/mixed.jrxml")
@@ -135,6 +178,26 @@ final class JasperModularDataFillerFixture {
 
     }
 
+    record RecordItem(String name) {
+
+    }
+
+    @JasperModularReport(templatePath = "/reports/collection.jrxml")
+    static class RecordListReport extends ModularReport {
+
+        List<RecordItem> items;
+
+        RecordListReport(List<RecordItem> items) {this.items = items;}
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
+    static class WildcardListReport extends ModularReport {
+
+        List<? extends ItemsModule> modules;
+
+        WildcardListReport(List<? extends ItemsModule> modules) {this.modules = modules;}
+    }
+
     @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
     static class SubreportListReport extends ModularReport {
 
@@ -144,7 +207,7 @@ final class JasperModularDataFillerFixture {
 
     }
 
-    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "SelfNode")
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
     static class SelfNodeModule extends SubreportModule {
 
         List<SelfNodeModule> children;
@@ -175,7 +238,7 @@ final class JasperModularDataFillerFixture {
 
     }
 
-    @JasperSubreport(templatePath = "/reports/currency_module.jrxml", prefix = "Currency")
+    @JasperSubreport(templatePath = "/reports/currency_module.jrxml")
     static class CurrencyModule extends SubreportModule {
 
         String currencyCode;
@@ -186,7 +249,7 @@ final class JasperModularDataFillerFixture {
         public boolean isEmpty() {return false;}
     }
 
-    @JasperSubreport(templatePath = "/reports/financial_module.jrxml", prefix = "Financial")
+    @JasperSubreport(templatePath = "/reports/financial_module.jrxml")
     static class FinancialModule extends SubreportModule {
 
         CurrencyModule currencyModule;
@@ -197,7 +260,7 @@ final class JasperModularDataFillerFixture {
         public boolean isEmpty() {return false;}
     }
 
-    @JasperSubreport(templatePath = "/reports/summary_module.jrxml", prefix = "Summary")
+    @JasperSubreport(templatePath = "/reports/summary_module.jrxml")
     static class SummaryModule extends SubreportModule {
 
         CurrencyModule currencyModule;
@@ -220,7 +283,7 @@ final class JasperModularDataFillerFixture {
         }
     }
 
-    @JasperSubreport(templatePath = "/reports/items.jrxml", prefix = "Toggle")
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
     static class ToggleModule extends SubreportModule {
 
         boolean empty;
@@ -245,6 +308,60 @@ final class JasperModularDataFillerFixture {
         List<ToggleModule> modules;
 
         ToggleListReport(List<ToggleModule> modules) {this.modules = modules;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
+    static class RichModule extends SubreportModule {
+
+        String title;
+        List<LineItem> items;
+
+        RichModule(String title, List<LineItem> items) {
+            this.title = title;
+            this.items = items;
+        }
+
+        @Override
+        public boolean isEmpty() {return false;}
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
+    static class RichListReport extends ModularReport {
+
+        List<RichModule> modules;
+
+        RichListReport(List<RichModule> modules) {this.modules = modules;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
+    abstract static class MixedBaseModule extends SubreportModule {
+
+        @Override
+        public boolean isEmpty() {return false;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/items.jrxml")
+    static class MixedItemsModule extends MixedBaseModule {
+
+        String title;
+
+        MixedItemsModule(String title) {this.title = title;}
+    }
+
+    @JasperSubreport(templatePath = "/reports/other.jrxml")
+    static class MixedOtherModule extends MixedBaseModule {
+
+        String note;
+
+        MixedOtherModule(String note) {this.note = note;}
+    }
+
+    @JasperModularReport(templatePath = "/reports/subreportlist.jrxml")
+    static class MixedListReport extends ModularReport {
+
+        List<MixedBaseModule> modules;
+
+        MixedListReport(List<MixedBaseModule> modules) {this.modules = modules;}
     }
 
 }

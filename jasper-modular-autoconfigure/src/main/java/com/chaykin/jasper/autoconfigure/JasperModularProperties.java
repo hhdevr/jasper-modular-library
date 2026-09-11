@@ -8,10 +8,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "jasper.modular")
 public class JasperModularProperties {
 
-    /** Whether to precompile discovered JRXML templates at startup. */
+    /**
+     * Whether to precompile discovered JRXML templates at startup.
+     */
     private boolean precompileEnabled = true;
 
-    /** Base package scanned for report and subreport classes; empty disables scanning. */
+    /**
+     * Base package scanned for report and subreport classes; empty disables scanning.
+     */
     private String basePackage = "";
 
     public boolean isPrecompileEnabled() {return precompileEnabled;}

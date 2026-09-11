@@ -47,7 +47,7 @@ final class JrxmlTemplateInjectorFixtures {
 
     /**
      * Collection param with LIST component type and default column width.
-     * Simulates a collection field without {@code @JasperCollection} annotation.
+     * Simulates {@code @JasperCollection(type = CollectionComponentType.LIST)}.
      */
     static List<JrxmlParameter> collectionParam() {
         JrxmlDatasetField field =
@@ -63,7 +63,7 @@ final class JrxmlTemplateInjectorFixtures {
 
     /**
      * Collection param with LIST component type and custom column width.
-     * Simulates {@code @JasperCollection(columnWidth = 80)}.
+     * Simulates {@code @JasperCollection(type = CollectionComponentType.LIST, columnWidth = 80)}.
      */
     static List<JrxmlParameter> collectionParamWithCustomWidth() {
         JrxmlDatasetField field =
@@ -142,9 +142,9 @@ final class JrxmlTemplateInjectorFixtures {
 
     /**
      * Subreport-list params, mirroring what the processor emits for a {@code List<ArtistModule>}
-     * field: a shared {@code <prefix>Report} param plus a {@code <prefix>DataSource} param
-     * carrying a single-field ({@code params}) dataset. The non-null dataset together with the
-     * non-null subreport prefix flags it for repeating-subreport injection.
+     * field: a {@code <prefix>DataSource} param carrying a two-field ({@code params},
+     * {@code report}) dataset. The non-null dataset together with the non-null subreport prefix
+     * flags it for repeating-subreport injection.
      */
     static List<JrxmlParameter> subreportListParams() {
         JrxmlDataset dataset = new JrxmlDataset(

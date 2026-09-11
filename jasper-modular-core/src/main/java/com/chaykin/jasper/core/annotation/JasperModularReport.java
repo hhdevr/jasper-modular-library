@@ -1,6 +1,7 @@
 package com.chaykin.jasper.core.annotation;
 
 import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
@@ -16,13 +17,14 @@ import java.lang.annotation.Target;
  *
  * @see com.chaykin.jasper.core.model.ModularReport
  */
+@Inherited
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface JasperModularReport {
 
     /**
-     * Classpath-relative path to the JRXML template; must start with {@code /}
-     * (e.g. {@code "/reports/invoice.jrxml"}).
+     * Classpath path to the JRXML template, read from the classpath root with or without
+     * a leading {@code /} (e.g. {@code "/reports/invoice.jrxml"}).
      */
     String templatePath();
 
