@@ -9,6 +9,7 @@ import net.sf.jasperreports.components.list.StandardListComponent;
 import net.sf.jasperreports.components.table.DesignCell;
 import net.sf.jasperreports.components.table.StandardColumn;
 import net.sf.jasperreports.components.table.StandardTable;
+import net.sf.jasperreports.engine.JRDatasetRun;
 import net.sf.jasperreports.engine.JRException;
 import net.sf.jasperreports.engine.component.Component;
 import net.sf.jasperreports.engine.data.JRAbstractBeanDataSource;
@@ -129,14 +130,11 @@ public class JrxmlTemplateInjector {
 
         for (JrxmlParameter field: collectionFields) {
             if (collectionComponentExists(detailSection, field.dataset().name())) {
-                note("List component already exists - skipping: "
-                                      + field.name());
+                note("Collection component already exists - skipping: " + field.name());
                 continue;
             }
 
-            JRDesignBand band = new JRDesignBand();
-            band.setHeight(LIST_HEIGHT);
-            band.setSplitType(SplitTypeEnum.STRETCH);
+            JRDesignBand band = emptyBand(LIST_HEIGHT);
 
             if (field.dataset().componentType() == CollectionComponentType.TABLE) {
                 band.addElement(createTableComponent(field));
@@ -155,17 +153,18 @@ public class JrxmlTemplateInjector {
                      .flatMap(b -> Arrays.stream(b.getElements()))
                      .filter(e -> e instanceof JRDesignComponentElement)
                      .map(e -> (JRDesignComponentElement) e)
-                     .anyMatch(e -> {
-                         if (e.getComponent() instanceof StandardListComponent listComponent) {
-                             JRDesignDatasetRun run = (JRDesignDatasetRun) listComponent.getDatasetRun();
-                             return run != null && datasetName.equals(run.getDatasetName());
-                         }
-                         if (e.getComponent() instanceof StandardTable table) {
-                             JRDesignDatasetRun run = (JRDesignDatasetRun) table.getDatasetRun();
-                             return run != null && datasetName.equals(run.getDatasetName());
-                         }
-                         return false;
-                     });
+                     .map(e -> datasetRunOf(e.getComponent()))
+                     .anyMatch(run -> run != null && datasetName.equals(run.getDatasetName()));
+    }
+
+    private static JRDatasetRun datasetRunOf(Component component) {
+        if (component instanceof StandardListComponent list) {
+            return list.getDatasetRun();
+        }
+        if (component instanceof StandardTable table) {
+            return table.getDatasetRun();
+        }
+        return null;
     }
 
     private JRDesignComponentElement createListComponent(JrxmlParameter field) {
@@ -279,6 +278,13 @@ public class JrxmlTemplateInjector {
         return subreport;
     }
 
+    static JRDesignBand emptyBand(int height) {
+        JRDesignBand band = new JRDesignBand();
+        band.setHeight(height);
+        band.setSplitType(SplitTypeEnum.STRETCH);
+        return band;
+    }
+
     private static JRDesignExpression expression(String text) {
         JRDesignExpression expression = new JRDesignExpression();
         expression.setText(text);
@@ -321,9 +327,7 @@ public class JrxmlTemplateInjector {
     }
 
     private JRDesignBand createSubreportBand(String prefix, int columnWidth) {
-        JRDesignBand band = new JRDesignBand();
-        band.setHeight(SUBREPORT_HEIGHT);
-        band.setSplitType(SplitTypeEnum.STRETCH);
+        JRDesignBand band = emptyBand(SUBREPORT_HEIGHT);
 
         band.addElement(createSubreport(columnWidth,
                                         "$P{" + prefix + MAP_PARAMETER_SUFFIX + "}",
@@ -349,9 +353,7 @@ public class JrxmlTemplateInjector {
                 continue;
             }
 
-            JRDesignBand band = new JRDesignBand();
-            band.setHeight(SUBREPORT_HEIGHT);
-            band.setSplitType(SplitTypeEnum.STRETCH);
+            JRDesignBand band = emptyBand(SUBREPORT_HEIGHT);
             band.addElement(createSubreportListComponent(field, columnWidth));
             detailSection.addBand(band);
 

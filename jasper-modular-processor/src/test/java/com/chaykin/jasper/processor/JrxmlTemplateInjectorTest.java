@@ -286,7 +286,7 @@ class JrxmlTemplateInjectorTest {
             inject(new ByteArrayInputStream(firstResult), params);
 
             // then
-            assertThat(messager.hasNote("List component already exists - skipping: "
+            assertThat(messager.hasNote("Collection component already exists - skipping: "
                                         + COLLECTION_PARAM_NAME)).isTrue();
             assertThat(messager.hasNote("Injected list component: "
                                         + COLLECTION_PARAM_NAME)).isFalse();
@@ -353,7 +353,7 @@ class JrxmlTemplateInjectorTest {
             inject(new ByteArrayInputStream(firstResult), params);
 
             // then
-            assertThat(messager.hasNote("List component already exists - skipping: "
+            assertThat(messager.hasNote("Collection component already exists - skipping: "
                                         + TABLE_PARAM_NAME)).isTrue();
             assertThat(messager.hasNote("Injected table component: "
                                         + TABLE_PARAM_NAME)).isFalse();

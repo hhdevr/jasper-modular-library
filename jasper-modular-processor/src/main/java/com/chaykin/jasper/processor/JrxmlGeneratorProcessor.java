@@ -20,11 +20,9 @@ import net.sf.jasperreports.engine.JRParameter;
 import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.data.JRAbstractBeanDataSource;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
-import net.sf.jasperreports.engine.design.JRDesignBand;
 import net.sf.jasperreports.engine.design.JRDesignSection;
 import net.sf.jasperreports.engine.design.JasperDesign;
 import net.sf.jasperreports.engine.type.OrientationEnum;
-import net.sf.jasperreports.engine.type.SplitTypeEnum;
 import net.sf.jasperreports.engine.xml.JRXmlLoader;
 
 import javax.annotation.processing.AbstractProcessor;
@@ -75,6 +73,7 @@ import static com.chaykin.jasper.core.contract.JasperModularDataFiller.DATASET_S
 import static com.chaykin.jasper.core.contract.JasperModularDataFiller.DATA_SOURCE_SUFFIX;
 import static com.chaykin.jasper.core.contract.JasperModularDataFiller.MAP_PARAMETER_SUFFIX;
 import static com.chaykin.jasper.core.contract.JasperModularDataFiller.REPORT_SUFFIX;
+import static com.chaykin.jasper.processor.JrxmlTemplateInjector.emptyBand;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -375,13 +374,6 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
         design.setSummary(emptyBand(20));
 
         return design;
-    }
-
-    private static JRDesignBand emptyBand(int height) {
-        JRDesignBand band = new JRDesignBand();
-        band.setHeight(height);
-        band.setSplitType(SplitTypeEnum.STRETCH);
-        return band;
     }
 
     private List<JrxmlParameter> describeFields(TypeElement classElement) {
