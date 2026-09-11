@@ -8,6 +8,8 @@ import com.chaykin.jasper.core.annotation.JasperModularReport;
 import com.chaykin.jasper.core.annotation.JasperSubreport;
 import com.chaykin.jasper.core.annotation.PageOrientation;
 import com.chaykin.jasper.core.contract.JasperModularDataFiller;
+import com.chaykin.jasper.core.model.ModularReport;
+import com.chaykin.jasper.core.model.SubreportModule;
 import com.chaykin.jasper.processor.model.JrxmlDataset;
 import com.chaykin.jasper.processor.model.JrxmlDatasetField;
 import com.chaykin.jasper.processor.model.JrxmlParameter;
@@ -170,9 +172,14 @@ public class JrxmlGeneratorProcessor extends AbstractProcessor {
                 continue;
             }
 
-            if (!isModularDataFillerSubtype(classElement.asType())) {
-                error("Annotated report classes must extend ModularReport or SubreportModule: "
-                      + classElement.getSimpleName(), classElement);
+            if (isSubreport && !isAssignableTo(classElement.asType(), SubreportModule.class)) {
+                error("@JasperSubreport class " + classElement.getSimpleName()
+                      + " must extend SubreportModule", classElement);
+                continue;
+            }
+            if (isRoot && !isAssignableTo(classElement.asType(), ModularReport.class)) {
+                error("@JasperModularReport class " + classElement.getSimpleName()
+                      + " must extend ModularReport", classElement);
                 continue;
             }
 

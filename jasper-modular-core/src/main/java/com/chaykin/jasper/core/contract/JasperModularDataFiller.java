@@ -47,8 +47,8 @@ public class JasperModularDataFiller {
      * Traverses all declared fields up the class hierarchy and builds the JasperReports
      * parameters map.
      *
-     * @throws JasperModularException on reflection failure, subreport compilation failure, or a
-     *                                circular subreport dependency
+     * @throws JasperModularException if a field breaks the wiring rules, a subreport template is
+     *                                missing or does not compile, or subreports form a cycle
      */
     public Map<String, Object> fillMapParameters() {
         Map<String, Object> params = new HashMap<>();
@@ -156,7 +156,7 @@ public class JasperModularDataFiller {
     }
 
     private void requireModule(Class<?> type, String fieldName) {
-        if (!JasperModularDataFiller.class.isAssignableFrom(type)) {
+        if (!SubreportModule.class.isAssignableFrom(type)) {
             throw new JasperModularException(
                     "@JasperSubreport class " + type.getSimpleName()
                     + " must extend SubreportModule. Field: " + fieldName);
