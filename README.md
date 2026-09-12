@@ -8,7 +8,7 @@
 **A Spring Boot library for simplifying and unifying JasperReports report development.**
 
 jasper-modular brings modularity to JasperReports: you assemble a report from reusable subreport
-components, each declared as an annotated field in a Java class. The processor generates the
+components, each declared as a field in a Java class. The processor generates the
 required parameters in the JRXML at compile time, and the runtime passes everything automatically —
 data is described as plain Java objects, and JRXML contains only design.
 
@@ -20,8 +20,8 @@ one `params.put()` per field in Java. With many subreports this becomes dozens o
 across multiple files.
 
 jasper-modular uses a different technique: a single embedded subreport receives exactly two parameters —
-the compiled report object (`<prefix>Report`) and a single `Map<String, Object>`
-(`<prefix>MapParameter`) containing all of the subreport's data. Inside the subreport, the map
+the compiled report object (`<field>Report`) and a single `Map<String, Object>`
+(`<field>MapParameter`) containing all of the subreport's data. Inside the subreport, the map
 is automatically unpacked into individual parameters by JasperReports' built-in
 `REPORT_PARAMETERS_MAP` mechanism — a little-known capability that eliminates
 parameter-by-parameter drilling entirely. A `List` of subreport modules is rendered as a repeating
@@ -56,7 +56,7 @@ JRXML) and drift and typos are inevitable.
 **With jasper-modular:**
 
 - A root report is just a Java class annotated with `@JasperModularReport`
-- A subreport is just a field in that class annotated with `@JasperSubreport`
+- A subreport is just a field in that class whose type is annotated with `@JasperSubreport`
 - The annotation processor generates all parameters and datasets in the JRXML at compile time
 - The runtime compiles, fills, and assembles the entire report — including all subreports and their
   data — no manual boilerplate
@@ -115,7 +115,8 @@ JasperReports version alongside it so the processor can use the correct API at c
 </plugin>
 ```
 
-For PDF export, add the JasperReports PDF extension (intentionally excluded from the starter):
+For PDF export on JasperReports 7.x, add the PDF extension (intentionally excluded from the starter).
+On 6.x the PDF exporter is already in the core `jasperreports` jar, and this artifact does not exist:
 
 ```xml
 <dependency>
@@ -134,7 +135,8 @@ For PDF export, add the JasperReports PDF extension (intentionally excluded from
 ```java
 @Getter
 @Setter
-@JasperSubreport(templatePath = "/reports/sub_items.jrxml", prefix = "Items")
+@AllArgsConstructor
+@JasperSubreport(templatePath = "/reports/sub_items.jrxml")
 public class ItemsModule extends SubreportModule {
 
     private List<LineItem> items;
@@ -196,15 +198,14 @@ modules:
 
 ```
 CompanyReport (@JasperModularReport)
-├── TitleSubModule (@JasperSubreport)
-│   └── companyDetails, period, currency, totals
-└── FinancialSubModule (@JasperSubreport)
-    ├── RevenueSubModule (@JasperSubreport)
-    │   └── totalRevenue, growthPercent, List<RevenueItem>
-    ├── ExpenseSubModule (@JasperSubreport)
-    │   └── totalExpenses, growthPercent, List<ExpenseItem>
-    └── ProfitSubModule (@JasperSubreport)
-        └── grossProfit, operatingProfit, netProfit, margin, List<ProfitBreakdown>
+├── title: TitleSubModule (@JasperSubreport)
+│   └── companyDetails, period, currency, totals, List<String> highlights
+├── financial: FinancialSubModule (@JasperSubreport)
+│   ├── revenue: RevenueSubModule — totalRevenue, growthPercent, List<RevenueItem>
+│   ├── expense: ExpenseSubModule — totalExpenses, growthPercent, List<ExpenseItem>
+│   └── profit: ProfitSubModule — grossProfit, operatingProfit, netProfit, margin, List<ProfitBreakdown>
+└── departments: List<DepartmentSubModule> — repeating subreport
+    └── name, headcount, budget, List<EmployeeItem>
 ```
 
 Each module is a standalone class with its own JRXML template. The root report declares them as
@@ -248,22 +249,25 @@ names, and the report model stays a POJO you can unit-test without ever producin
 ### At compile time
 
 The annotation processor (`JrxmlGeneratorProcessor`) runs during `mvn compile`, inspects every class
-annotated with `@JasperModularReport` and `@JasperSubreport`, and injects the missing elements into
-the existing JRXML template:
+annotated with `@JasperModularReport` and `@JasperSubreport`, and adds the missing elements to a copy
+of its JRXML template in `target/generated-sources`:
 
 - `<parameter>` for each field
 - `<dataset>` and a `list` or `table` component for each `Collection<T>` field
+- a repeating-subreport `list` for each collection of `@JasperSubreport` modules
 - Subreport bands in the `<detail>` section for each subreport field
 
 Existing elements are detected by name and never overwritten — custom layout, styles, and
-expressions created in Jaspersoft Studio are always preserved.
+expressions created in Jaspersoft Studio are always preserved. The processor also checks the
+template against the class: the build fails when the template declares a generated parameter or
+dataset that no field produces, or a parameter whose class differs from its field.
 
 ### At runtime
 
 When `render(module)` is called, the template is compiled from the JRXML resource (or taken from the
 in-memory cache), and all fields are traversed via reflection to build the `Map<String, Object>`
-parameters map. Subreport fields are recursively compiled and filled, injecting `<prefix>Report` and
-`<prefix>MapParameter`. Collection fields are stored in the map as `JRBeanCollectionDataSource`
+parameters map. Subreport fields get their templates compiled and their parameter maps built
+recursively, producing `<field>Report` and `<field>MapParameter`. Collection fields are stored in the map as `JRBeanCollectionDataSource`
 values. These are **parameters**, not the root data source: in JRXML you reference them via
 `$P{fieldName}` in the `<dataSourceExpression>` of a `list` or `table` component. The fill uses
 `JasperFillManager.fillReport()` with `JREmptyDataSource` as the root data source (the library never
@@ -305,7 +309,7 @@ elements in the design, and copy the file back to `src/main/resources/reports/`.
 | Mode               | Behavior                                                                           |
 |--------------------|------------------------------------------------------------------------------------|
 | `INJECT` (default) | Injects missing elements into the existing JRXML without touching existing content |
-| `CREATE`           | Creates a new JRXML from a blank design, overwriting any existing file             |
+| `CREATE`           | Creates a new JRXML from a blank design, ignoring any existing file                |
 | `NONE`             | No processing — manage the JRXML entirely by hand                                  |
 
 ```java
@@ -349,10 +353,13 @@ Marks a class as a root report. The class must extend `ModularReport`.
 
 Marks a class as a subreport module. The class must extend `SubreportModule`.
 
+Parameter names in the parent template come from the field that holds the module: a field `items`
+becomes `itemsReport` and `itemsMapParameter`, a list of such modules in a field `items` becomes
+`itemsDataSource`.
+
 | Attribute      | Type              | Required | Description                                        |
 |----------------|-------------------|----------|----------------------------------------------------|
 | `templatePath` | `String`          | Yes      | Classpath path to the JRXML file                   |
-| `prefix`       | `String`          | No       | Parameter name prefix (default: simple class name) |
 | `mode`         | `GenerationMode`  | No       | Generation strategy (default: `INJECT`)            |
 | `orientation`  | `PageOrientation` | No       | Page orientation (default: `PORTRAIT`)             |
 
@@ -367,6 +374,11 @@ Controls the JRXML component type for a collection field.
 
 The default component type is `TABLE` — whether the annotation is present (without an explicit
 `type`) or absent entirely. Use `type = CollectionComponentType.LIST` for a `list` component.
+
+Dataset fields come from the element class's JavaBean getters, so element classes need getters;
+records are rejected at compile time. A collection of simple values — `String`, numbers, dates,
+enums — gets a single `_THIS` field, which JasperReports fills with the element itself (`$F{_THIS}`
+in the cell).
 
 ```java
 @JasperCollection(type = CollectionComponentType.TABLE, columnWidth = 80)
@@ -431,10 +443,10 @@ jasper-modular-parent
 
 ## Exporting to other formats
 
-`JasperModularRenderer.render()` returns a format-neutral `JasperPrint`. Add the exporter for the
-format you need:
-
-**XLSX:**
+`JasperModularRenderer.render()` returns a format-neutral `JasperPrint` — export it with any
+JasperReports exporter. The XLSX (`JRXlsxExporter`) and HTML (`HtmlExporter`) exporters ship with the
+core `jasperreports` jar on both 6.x and 7.x; PDF on 7.x needs `jasperreports-pdf` (see
+[Installation](#installation)). Only the legacy `.xls` exporter needs extra libraries — on 7.x:
 
 ```xml
 <dependency>
@@ -444,8 +456,26 @@ format you need:
 </dependency>
 ```
 
-Then use `JRXlsxExporter` or any other exporter from JasperReports. HTML export is available from
-the core `jasperreports` jar without any additional dependency.
+and on 6.x — Apache POI (`org.apache.poi:poi`).
+
+---
+
+## Migrating from 2.0.x
+
+- **Parameter names come from the field.** A subreport field `itemsModule` now produces
+  `itemsModuleReport` and `itemsModuleMapParameter` instead of `<prefix>Report` and
+  `<prefix>MapParameter`, where the prefix was the `prefix` attribute or the module's class name.
+  Rename these parameters and their `$P{...}` references in your templates.
+- **`prefix` is removed from `@JasperSubreport`.** Delete the attribute.
+- **Bean collections default to `TABLE`.** A collection field without `@JasperCollection` now gets
+  a `table` component instead of a `list`. Components already in your templates are not affected;
+  to keep generating lists, use `@JasperCollection(type = CollectionComponentType.LIST)`.
+- **`SubreportModule.getOrder()` and `isStartNewPage()` are removed.** They never affected
+  rendering; delete the overrides and set order and page breaks in the template.
+- **Templates and base classes are checked at compile time.** The build fails when a template
+  declares a generated parameter or dataset that no field produces, or a parameter whose class
+  differs from its field, and when a `@JasperModularReport` class does not extend `ModularReport` or
+  a `@JasperSubreport` class does not extend `SubreportModule`. The error message says what to change.
 
 ---
 

@@ -8,7 +8,7 @@
 **Spring Boot библиотека для упрощения и унификации работы с JasperReports отчётами.**
 
 jasper-modular привносит модульность в JasperReports: отчёт собирается из переиспользуемых
-компонентов-субрепортов, каждый из которых объявляется как аннотированное поле в Java-классе.
+компонентов-субрепортов, каждый из которых объявляется как поле в Java-классе.
 Процессор сам генерирует нужные параметры в JRXML при компиляции, рантайм сам передаёт всё что
 нужно — данные описываются обычными Java-объектами, а JRXML содержит только дизайн.
 
@@ -20,8 +20,8 @@ jasper-modular привносит модульность в JasperReports: от�
 в десятки ручных записей в нескольких файлах.
 
 jasper-modular использует другой приём: одиночный встроенный субрепорт получает ровно два параметра —
-скомпилированный объект отчёта (`<prefix>Report`) и единую `Map<String, Object>`
-(`<prefix>MapParameter`), содержащую все данные субрепорта. Внутри субрепорта мапа автоматически
+скомпилированный объект отчёта (`<field>Report`) и единую `Map<String, Object>`
+(`<field>MapParameter`), содержащую все данные субрепорта. Внутри субрепорта мапа автоматически
 распаковывается в отдельные параметры через встроенный механизм JasperReports
 `REPORT_PARAMETERS_MAP` — малоизвестную возможность, которая полностью устраняет поштучный дриллинг
 параметров. `List` модулей-субрепортов рендерится иначе — как повторяемый субрепорт, по одному
@@ -56,7 +56,7 @@ jasper-modular использует другой приём: одиночный 
 **С jasper-modular:**
 
 - Корневой отчёт — это просто Java-класс с аннотацией `@JasperModularReport`
-- Субрепорт — это просто поле в Java-классе с аннотацией `@JasperSubreport`
+- Субрепорт — это просто поле в Java-классе, тип которого помечен аннотацией `@JasperSubreport`
 - Аннотационный процессор сам генерирует все параметры и датасеты в JRXML при компиляции
 - Рантайм сам компилирует, заполняет и собирает весь отчёт целиком — включая все субрепорты и их
   данные — никакого ручного boilerplate
@@ -82,7 +82,7 @@ jasper-modular использует другой приём: одиночный 
 <dependency>
     <groupId>io.github.hhdevr</groupId>
     <artifactId>jasper-modular-starter</artifactId>
-    <version>2.0.1</version>
+    <version>3.0.0</version>
 </dependency>
 
 <dependency>
@@ -104,7 +104,7 @@ jasper-modular использует другой приём: одиночный 
             <path>
                 <groupId>io.github.hhdevr</groupId>
                 <artifactId>jasper-modular-processor</artifactId>
-                <version>2.0.1</version>
+                <version>3.0.0</version>
             </path>
             <path>
                 <groupId>net.sf.jasperreports</groupId>
@@ -116,7 +116,8 @@ jasper-modular использует другой приём: одиночный 
 </plugin>
 ```
 
-Для экспорта в PDF добавьте расширение JasperReports (не включено в стартер намеренно):
+Для экспорта в PDF на JasperReports 7.x добавьте расширение (в стартер оно не включено намеренно).
+В 6.x PDF-экспортёр уже есть в основном jar `jasperreports`, а такого артефакта нет:
 
 ```xml
 <dependency>
@@ -135,7 +136,8 @@ jasper-modular использует другой приём: одиночный 
 ```java
 @Getter
 @Setter
-@JasperSubreport(templatePath = "/reports/sub_items.jrxml", prefix = "Items")
+@AllArgsConstructor
+@JasperSubreport(templatePath = "/reports/sub_items.jrxml")
 public class ItemsModule extends SubreportModule {
 
     private List<LineItem> items;
@@ -197,15 +199,14 @@ byte[] pdf = out.toByteArray();
 
 ```
 CompanyReport (@JasperModularReport)
-├── TitleSubModule (@JasperSubreport)
-│   └── companyDetails, period, currency, totals
-└── FinancialSubModule (@JasperSubreport)
-    ├── RevenueSubModule (@JasperSubreport)
-    │   └── totalRevenue, growthPercent, List<RevenueItem>
-    ├── ExpenseSubModule (@JasperSubreport)
-    │   └── totalExpenses, growthPercent, List<ExpenseItem>
-    └── ProfitSubModule (@JasperSubreport)
-        └── grossProfit, operatingProfit, netProfit, margin, List<ProfitBreakdown>
+├── title: TitleSubModule (@JasperSubreport)
+│   └── companyDetails, period, currency, totals, List<String> highlights
+├── financial: FinancialSubModule (@JasperSubreport)
+│   ├── revenue: RevenueSubModule — totalRevenue, growthPercent, List<RevenueItem>
+│   ├── expense: ExpenseSubModule — totalExpenses, growthPercent, List<ExpenseItem>
+│   └── profit: ProfitSubModule — grossProfit, operatingProfit, netProfit, margin, List<ProfitBreakdown>
+└── departments: List<DepartmentSubModule> — повторяемый субрепорт
+    └── name, headcount, budget, List<EmployeeItem>
 ```
 
 Каждый модуль — самостоятельный класс со своим JRXML-шаблоном. Корневой отчёт объявляет
@@ -249,21 +250,25 @@ RevenueModule revenue = new RevenueModule(total, growth, items);
 ### Во время компиляции
 
 Аннотационный процессор (`JrxmlGeneratorProcessor`) запускается во время `mvn compile`, инспектирует
-все классы, аннотированные `@JasperModularReport` и `@JasperSubreport`, и вставляет недостающие
-элементы в существующий шаблон JRXML:
+все классы, аннотированные `@JasperModularReport` и `@JasperSubreport`, и дописывает недостающие
+элементы в копию их JRXML-шаблона в `target/generated-sources`:
 
 - `<parameter>` для каждого поля
 - `<dataset>` и компонент `list` или `table` для каждого поля типа `Collection<T>`
+- повторяемый субрепорт (`list`) для каждой коллекции модулей с `@JasperSubreport`
 - Bands с субрепортами в секции `<detail>` для каждого поля-субрепорта
 
 Существующие элементы определяются по имени и никогда не перезаписываются — пользовательский layout,
-стили и выражения, созданные в Jaspersoft Studio, всегда сохраняются.
+стили и выражения, созданные в Jaspersoft Studio, всегда сохраняются. Кроме того, процессор сверяет
+шаблон с классом: сборка падает, если шаблон объявляет сгенерированный параметр или датасет, который
+не порождает ни одно поле, или параметр с классом, отличным от типа поля.
 
 ### В рантайме
 
 При вызове `render(module)` шаблон компилируется из JRXML-ресурса (или берётся из кэша), и все поля
-обходятся через рефлексию для формирования `Map<String, Object>` параметров. Поля-субрепорты
-рекурсивно компилируются и заполняются, добавляя `<prefix>Report` и `<prefix>MapParameter`.
+обходятся через рефлексию для формирования `Map<String, Object>` параметров. Для полей-субрепортов
+рекурсивно компилируются шаблоны и собираются карты параметров — так появляются `<field>Report` и
+`<field>MapParameter`.
 Поля-коллекции кладутся в карту как значения `JRBeanCollectionDataSource`. Это **параметры**, а не
 корневой источник данных: в JRXML ссылайтесь на них через `$P{fieldName}` в `<dataSourceExpression>`
 компонента `list` или `table`. Заполнение идёт через `JasperFillManager.fillReport()` с
@@ -306,7 +311,7 @@ JRXML-файл со всем необходимым — `<parameter>` для к�
 | Режим                   | Поведение                                                               |
 |-------------------------|-------------------------------------------------------------------------|
 | `INJECT` (по умолчанию) | Вставляет недостающие элементы в JRXML не трогая остальное              |
-| `CREATE`                | Создаёт новый JRXML из пустого шаблона, перезаписывая существующий файл |
+| `CREATE`                | Создаёт новый JRXML из пустого шаблона, игнорируя существующий файл     |
 | `NONE`                  | Генерация не выполняется — управляйте JRXML полностью вручную           |
 
 ```java
@@ -350,10 +355,13 @@ jasper:
 
 Помечает класс как модуль субрепорта. Класс должен наследовать `SubreportModule`.
 
+Имена параметров в родительском шаблоне берутся из поля, в котором лежит модуль: поле `items`
+превращается в `itemsReport` и `itemsMapParameter`, а список таких модулей в поле `items` — в
+`itemsDataSource`.
+
 | Атрибут        | Тип               | Обязательно | Описание                                                       |
 |----------------|-------------------|-------------|----------------------------------------------------------------|
 | `templatePath` | `String`          | Да          | Путь к JRXML-файлу в classpath                                 |
-| `prefix`       | `String`          | Нет         | Префикс для имён параметров (по умолчанию: простое имя класса) |
 | `mode`         | `GenerationMode`  | Нет         | Стратегия генерации (по умолчанию: `INJECT`)                   |
 | `orientation`  | `PageOrientation` | Нет         | Ориентация страницы (по умолчанию: `PORTRAIT`)                 |
 
@@ -368,6 +376,11 @@ jasper:
 
 Тип компонента по умолчанию — `TABLE`, независимо от того, присутствует аннотация (без явного
 `type`) или отсутствует совсем. Для компонента `list` укажите `type = CollectionComponentType.LIST`.
+
+Поля датасета берутся по JavaBean-геттерам класса-элемента, поэтому геттеры у элемента обязательны;
+record в роли элемента отклоняется при компиляции. Коллекция простых значений — `String`, чисел, дат,
+enum — получает единственное поле `_THIS`, в которое JasperReports кладёт сам элемент (`$F{_THIS}` в
+ячейке).
 
 ```java
 @JasperCollection(type = CollectionComponentType.TABLE, columnWidth = 80)
@@ -432,10 +445,10 @@ jasper-modular-parent
 
 ## Экспорт в другие форматы
 
-`JasperModularRenderer.render()` возвращает формат-нейтральный `JasperPrint`. Добавьте нужный
-экспортёр:
-
-**XLSX:**
+`JasperModularRenderer.render()` возвращает формат-нейтральный `JasperPrint` — экспортируйте его любым
+экспортёром JasperReports. XLSX (`JRXlsxExporter`) и HTML (`HtmlExporter`) входят в основной jar
+`jasperreports` и в 6.x, и в 7.x; для PDF в 7.x нужен `jasperreports-pdf` (см.
+[Подключение](#подключение)). Дополнительные библиотеки нужны только для старого формата `.xls` — в 7.x:
 
 ```xml
 <dependency>
@@ -445,8 +458,26 @@ jasper-modular-parent
 </dependency>
 ```
 
-Затем используйте `JRXlsxExporter` или другой экспортёр из JasperReports. HTML экспорт доступен из
-основного `jasperreports` jar без дополнительных зависимостей.
+а в 6.x — Apache POI (`org.apache.poi:poi`).
+
+---
+
+## Переход с 2.0.x
+
+- **Имена параметров берутся из поля.** Поле-субрепорт `itemsModule` теперь даёт `itemsModuleReport`
+  и `itemsModuleMapParameter` вместо `<prefix>Report` и `<prefix>MapParameter`, где префиксом был
+  атрибут `prefix` или имя класса модуля. Переименуйте эти параметры и их `$P{...}` в шаблонах.
+- **Атрибут `prefix` удалён из `@JasperSubreport`.** Уберите его.
+- **Коллекции бинов по умолчанию — `TABLE`.** Поле-коллекция без `@JasperCollection` теперь получает
+  компонент `table` вместо `list`. Компоненты, которые уже есть в шаблонах, не меняются; чтобы и дальше
+  генерировались списки, укажите `@JasperCollection(type = CollectionComponentType.LIST)`.
+- **`SubreportModule.getOrder()` и `isStartNewPage()` удалены.** На рендер они никогда не влияли;
+  удалите переопределения, а порядок и разрывы страниц задавайте в шаблоне.
+- **Шаблоны и базовые классы проверяются при компиляции.** Сборка падает, если шаблон объявляет
+  сгенерированный параметр или датасет, который не порождает ни одно поле, или параметр с классом,
+  отличным от типа поля, а также если класс с `@JasperModularReport` не наследует `ModularReport` или
+  класс с `@JasperSubreport` не наследует `SubreportModule`. Сообщение об ошибке подсказывает, что
+  поправить.
 
 ---
 
